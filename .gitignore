@@ -2,3 +2,6 @@
 .idea/
 .vscode/
 __pycache__/
+
+# Images
+*.png
