@@ -153,7 +153,7 @@ if args.calibrate:
                 # Display the resulting frame
                 cv2.imshow('Calibration process for camera0 ', img0)
                 cv2.imshow('Calibration process for camera1 ', img1)
-                cv2.waitKey(25)
+                cv2.waitKey(20)
 
     else:
         # read images captured by the first camera
@@ -259,16 +259,63 @@ if args.run:
 
     # start video acquisition loop
     while True:
+        # Capture frame-by-frame
+        ret0, frame0 = capture_object0.read()
+        ret1, frame1 = capture_object1.read()
 
         # read the camera streams
         img0 = cv2.cvtColor(frame0, cv2.COLOR_BGR2GRAY)
         img1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
 
         #Todo: filtering?/object localization?
+        """Thresholding"""
+
+        # color space to HSV
+        img0_hsv = cv2.cvtColor(frame0, cv2.COLOR_BGR2HSV)
+        img1_hsv = cv2.cvtColor(frame1, cv2.COLOR_BGR2HSV)
+
+        # mask creation for green marker
+        green_mask0 = cv2.inRange(img0_hsv, (40, 40, 20), (80, 240, 200))
+        green_mask1 = cv2.inRange(img1_hsv, (40, 40, 20), (80, 240, 200))
+
+        # set_trace()
+        # mask creation for red marker (wraps around the values -> 2 parts)
+        red_mask0 = cv2.inRange(img0_hsv, (0, 40, 20), (10, 240, 200)) \
+                            + cv2.inRange(img0_hsv, (170, 40, 20), (179, 240, 200))
+        red_mask1 = cv2.inRange(img1_hsv, (0, 40, 20), (10, 240, 200)) \
+                            + cv2.inRange(img1_hsv, (170, 40, 20), (179, 240, 200))
+
+        # mask composition
+        marker_mask0 = green_mask0 + red_mask0
+        marker_mask1 = green_mask1 + red_mask1
+
+        # morphological filtering (noise filtering and feature extraction)
+        #Todo: cv2.getStructuringElement() can also be used
+        cv2.morphologyEx(marker_mask0, cv2.MORPH_ERODE, np.ones((5, 5), np.uint8), dst=marker_mask0, iterations=2)
+        cv2.morphologyEx(marker_mask0, cv2.MORPH_CLOSE, np.ones((17, 17), np.uint8), dst=marker_mask0)
+        cv2.morphologyEx(marker_mask0, cv2.MORPH_DILATE, np.ones((13, 13), np.uint8), dst=marker_mask0, iterations=2)
+
+        cv2.morphologyEx(marker_mask1, cv2.MORPH_ERODE, np.ones((5, 5), np.uint8), dst=marker_mask1, iterations=2)
+        cv2.morphologyEx(marker_mask1, cv2.MORPH_CLOSE, np.ones((17, 17), np.uint8), dst=marker_mask1)
+        cv2.morphologyEx(marker_mask1, cv2.MORPH_DILATE, np.ones((13, 13), np.uint8), dst=marker_mask1, iterations=2)
+
+
+
+        # threshold based on mask
+        ret, roi0 = cv2.threshold(cv2.GaussianBlur(cv2.bitwise_and(img0, marker_mask0), (9, 9), 0), 96, 255,
+                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        ret, roi1 = cv2.threshold(cv2.GaussianBlur(cv2.bitwise_and(img1, marker_mask1), (9, 9), 0), 96, 255,
+                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+        cv2.imshow('0', roi0)
+        cv2.imshow('1', roi1)
 
         # remap
         img0_rm = cv2.remap(img0, mx0, my0, cv2.INTER_LINEAR)
         img1_rm = cv2.remap(img1, mx1, my1, cv2.INTER_LINEAR)
+
+        # img0_rm = cv2.remap(cv2.bitwise_and(img0, roi0), mx0, my0, cv2.INTER_LINEAR)
+        # img1_rm = cv2.remap(cv2.bitwise_and(img1, roi1), mx1, my1, cv2.INTER_LINEAR)
 
         """Calculate the disparity map"""
         disparity_map = stereoBM_object.compute(img0_rm, img1_rm)
@@ -278,14 +325,14 @@ if args.run:
         disparity_scaled = (disparity_map / 16.).astype(np.uint8) + abs(disparity_map.min())
 
         # show the remapped images and the scaled disparity map
-        cv2.imshow('remapped0', img0_rm)
-        cv2.imshow('remapped1', img1_rm)
+        # cv2.imshow('remapped0', img0_rm)
+        # cv2.imshow('remapped1', img1_rm)
         cv2.imshow('disp', disparity_scaled)
 
         """Image reprojection into 3D"""
         #Todo: it would be great if this transform could be only used for the object (ROI)
         img_in_3d = cv2.reprojectImageTo3D(disparity_map, Q)
-        cv2.imshow('3d', img_in_3d)
+        # cv2.imshow('3d', img_in_3d)
 
         if cv2.waitKey(40) & 0xFF == ord('x'):
             break
@@ -294,3 +341,4 @@ if args.run:
     capture_object0.release()
     capture_object1.release()
     cv2.destroyAllWindows()
+
