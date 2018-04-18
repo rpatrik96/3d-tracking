@@ -19,6 +19,18 @@ import numpy as np
 import cv2
 import h5py
 from pdb import set_trace
+
+"""
+Keycodes (presenter)
+
+Rigtht arrow: 34
+Left arrow: 33
+Presentation play: 27 (ESC)
+Display hide: 190 (0xBE)
+"""
+
+
+
 """-------------------------------------------------------------------------"""
 """----------------------------Argument parsing-----------------------------"""
 """-------------------------------------------------------------------------"""
@@ -72,7 +84,10 @@ if args.calibrate:
 
     # create dirs
     # if only one the folders exists, delete both
-    if not isdir(camera_subdir0) or not isdir(camera_subdir1) or args.force:
+    if not isdir(camera_subdir0) or not isdir(camera_subdir1) or args.force \
+                or len(listdir(camera_subdir0)) is not args.calnum \
+                or len(listdir(camera_subdir1)) is not args.calnum:
+
         if isdir(camera_subdir0):
             rmtree(camera_subdir0)
 
@@ -108,6 +123,11 @@ if args.calibrate:
 
     # record new images if needed
     if calibration_needed:
+
+        # indicates whether image is in a position to calibrate
+        match_flag = False
+        image_success = False
+
         # loop while we do not have the specified number of images for calibration
         while len(image_points0) is not args.calnum:
 
@@ -121,39 +141,54 @@ if args.calibrate:
                 img0 = cv2.cvtColor(frame0, cv2.COLOR_BGR2GRAY)
                 img1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
 
-                # Find the chess board corners
-                ret0, corners0 = cv2.findChessboardCorners(image=img0, patternSize=pattern_size, corners=None)
-                ret1, corners1 = cv2.findChessboardCorners(image=img1, patternSize=pattern_size, corners=None)
+                # proceed pnly if user moved image into position (and pressed one of the arrow buttons)
+                if match_flag:
+                    # Find the chess board corners
+                    ret0, corners0 = cv2.findChessboardCorners(image=img0, patternSize=pattern_size, corners=None)
+                    ret1, corners1 = cv2.findChessboardCorners(image=img1, patternSize=pattern_size, corners=None)
 
-                # proceed only if corners were found properly
-                if ret0 and ret1 is True:
-                    # write image for future use:
-                    cv2.imwrite(join(camera_subdir0, 'image_' + str(len(image_points0))) + '.png', img0)
-                    cv2.imwrite(join(camera_subdir1, 'image_' + str(len(image_points1))) + '.png', img1)
+                    # proceed only if corners were found properly
+                    if ret0 and ret1 is True:
+                        # clear match_flag
+                        match_flag = False
 
-                    print('Calibration process: ' + str(len(image_points0) + 1) + ' / ' + str(args.calnum))
+                        # set success flag for display delay
+                        image_success = True
 
-                    # find corner subpixels for better accuracy
-                    corners_subpix0 = cv2.cornerSubPix(img0, corners0, (11, 11), (-1, -1), criteria)
-                    corners_subpix1 = cv2.cornerSubPix(img1, corners1, (11, 11), (-1, -1), criteria)
+                        # write image for future use:
+                        cv2.imwrite(join(camera_subdir0, 'image_' + str(len(image_points0))) + '.png', img0)
+                        cv2.imwrite(join(camera_subdir1, 'image_' + str(len(image_points1))) + '.png', img1)
 
-                    # append the points for the proper lists
-                    image_points0.append(corners_subpix0)
-                    image_points1.append(corners_subpix1)
+                        print('Calibration process: ' + str(len(image_points0) + 1) + ' / ' + str(args.calnum))
 
-                    # Draw and display the corners
-                    img0 = cv2.drawChessboardCorners(cv2.cvtColor(img0, cv2.COLOR_GRAY2BGR), patternSize=pattern_size,
-                                                    corners=corners_subpix0, patternWasFound=ret0)
-                    img1 = cv2.drawChessboardCorners(cv2.cvtColor(img1, cv2.COLOR_GRAY2BGR), patternSize=pattern_size,
-                                                                    corners=corners_subpix1, patternWasFound=ret1)
+                        # find corner subpixels for better accuracy
+                        corners_subpix0 = cv2.cornerSubPix(img0, corners0, (11, 11), (-1, -1), criteria)
+                        corners_subpix1 = cv2.cornerSubPix(img1, corners1, (11, 11), (-1, -1), criteria)
 
-                    # need for a key
-                    cv2.waitKey(-1)
+                        # append the points for the proper lists
+                        image_points0.append(corners_subpix0)
+                        image_points1.append(corners_subpix1)
+
+                        # Draw and display the corners
+                        img0 = cv2.drawChessboardCorners(cv2.cvtColor(img0, cv2.COLOR_GRAY2BGR), patternSize=pattern_size,
+                                                        corners=corners_subpix0, patternWasFound=ret0)
+                        img1 = cv2.drawChessboardCorners(cv2.cvtColor(img1, cv2.COLOR_GRAY2BGR), patternSize=pattern_size,
+                                                                        corners=corners_subpix1, patternWasFound=ret1)
+
+
 
                 # Display the resulting frame
                 cv2.imshow('Calibration process for camera0 ', img0)
                 cv2.imshow('Calibration process for camera1 ', img1)
-                cv2.waitKey(20)
+
+                if image_success:
+                    cv2.waitKey(500)
+                    image_success = False
+
+
+                if cv2.waitKey(40) & 0xFF == 46:
+                    match_flag = True
+
 
     else:
         # read images captured by the first camera
@@ -191,10 +226,8 @@ if args.calibrate:
     Camera calibration for individual cameras 
     (results used as an initial guess for cv2.stereoCalibrate for a more robust result)
     """
-    ret0, camera_matrix0, dist_coeffs0, rotation_vec0, translation_vec0 = \
-                cv2.calibrateCamera(object_points, image_points0, img0.shape[::-1], None, None)
-    ret1, camera_matrix1, dist_coeffs1, rotation_vec1, translation_vec1 = \
-                    cv2.calibrateCamera(object_points, image_points1, img1.shape[::-1], None, None)
+    ret0, camera_matrix0, dist_coeffs0, rot_vec0, t_vec0 = cv2.calibrateCamera(object_points, image_points0, img0.shape[::-1], None, None)
+    ret1, camera_matrix1, dist_coeffs1, rot_vec1, t_vec1 = cv2.calibrateCamera(object_points, image_points1, img1.shape[::-1], None, None)
 
 
     # set flag values
@@ -236,6 +269,11 @@ if args.calibrate:
 
 
 if args.run:
+    if not isfile(parameter_path):
+        print("Calibration is needed to proceed, please run the program with the --calibrate flag")
+        input()
+        print("Exiting program...")
+        exit(-1)
 
     # read in parameters
     # [()] is needed to read in the whole array if you don't do that,
