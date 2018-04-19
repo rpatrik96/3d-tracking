@@ -324,8 +324,8 @@ if args.run:
                             + cv2.inRange(img1_hsv, (170, 40, 20), (179, 240, 200))
 
         # mask composition
-        marker_mask0 = green_mask0 + red_mask0
-        marker_mask1 = green_mask1 + red_mask1
+        marker_mask0 = green_mask0 #+ red_mask0
+        marker_mask1 = green_mask1 #+ red_mask1
 
         # morphological filtering (noise filtering and feature extraction)
         #Todo: cv2.getStructuringElement() can also be used
@@ -344,6 +344,19 @@ if args.run:
                                    cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         ret, roi1 = cv2.threshold(cv2.GaussianBlur(cv2.bitwise_and(img1, marker_mask1), (9, 9), 0), 96, 255,
                                    cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+
+        _, contours, _ = cv2.findContours(roi0, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        roi0 = cv2.drawContours(roi0, contours, -1, 128, 3)
+        cnt = contours[0]
+        # set_trace()
+        if cnt.sum():
+            # set_trace()
+            # area = cv2.contourArea(cnt)
+            (x, y), radius = cv2.minEnclosingCircle(cnt)
+            center = (int(x), int(y))
+            radius = int(radius)
+            img = cv2.circle(roi0, center, radius, 255, 2)
 
         cv2.imshow('0', roi0)
         cv2.imshow('1', roi1)
