@@ -295,6 +295,10 @@ if args.run:
     # create disparity matching object in advance
     stereoBM_object = cv2.StereoBM_create(numDisparities=128, blockSize=15)
 
+    # marker center point variables
+    marker_x0 = 0
+    marker_y0 = 0
+
     # start video acquisition loop
     while True:
         # Capture frame-by-frame
@@ -354,7 +358,7 @@ if args.run:
 
         # get contours
         _, contours, _ = cv2.findContours(roi0, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-        roi0 = cv2.drawContours(roi0, contours, -1, 128, 3)
+        # cv2.drawContours(roi0, contours, -1, 128, 3)
 
         # check only if there is some contour to find
         if len(contours):
@@ -362,16 +366,25 @@ if args.run:
 
             if cnt.sum():
                 rect = cv2.minAreaRect(cnt)
+
                 # get center point
                 (marker_x0, marker_y0), (_, _), _ = rect
+                # print('x:', marker_x0, '\ty:', marker_y0)
 
                 # create image for remapping
-                center_img0 = np.zeros(roi0.shape)
-                center_img0[np.round(marker_x0).astype(np.uint8), np.round(marker_y0).astype(np.uint8)] = 255
+                # center_img0 = np.zeros(roi0.shape)
+                # center_img0[np.round(marker_x0).astype(np.uint8), np.round(marker_y0).astype(np.uint8)] = 255
 
-                box = cv2.boxPoints(rect)
-                box = np.int0(box)
-                cv2.drawContours(roi0, [box], 0, 128, 2)
+                # # get points for rectangle plot
+                # box = cv2.boxPoints(rect)
+                # box = np.int0(box)
+                # cv2.drawContours(roi0, [box], 0, 128, 2)
+
+                # reinit roi for displaying only the center point
+
+        # display center point of marker0
+        roi0 = np.zeros(roi0.shape)
+        cv2.circle(roi0, (int(np.round(marker_x0)), int(np.round(marker_y0))), 10, 255, 20)
 
         cv2.imshow('0', frame0)
         cv2.imshow('1', roi0)
@@ -380,6 +393,12 @@ if args.run:
         # remap
         img0_rm = cv2.remap(img0, mx0, my0, cv2.INTER_LINEAR)
         img1_rm = cv2.remap(img1, mx1, my1, cv2.INTER_LINEAR)
+
+        cv2.imshow('2', img0_rm)
+        # cv2.imshow('4', img1_rm)
+
+        #todo: select disparity based on this remapped roi
+        cv2.imshow('3', cv2.remap(roi0, mx0, my0, cv2.INTER_LINEAR))
 
         # img0_rm = cv2.remap(cv2.bitwise_and(img0, roi0), mx0, my0, cv2.INTER_LINEAR)
         # img1_rm = cv2.remap(cv2.bitwise_and(img1, roi1), mx1, my1, cv2.INTER_LINEAR)
