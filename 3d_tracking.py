@@ -313,8 +313,9 @@ if args.run:
         img1_hsv = cv2.cvtColor(frame1, cv2.COLOR_BGR2HSV)
 
         # mask creation for green marker
-        green_mask0 = cv2.inRange(img0_hsv, (40, 40, 20), (80, 240, 200))
-        green_mask1 = cv2.inRange(img1_hsv, (40, 40, 20), (80, 240, 200))
+        green_mask0 = cv2.inRange(img0_hsv, (40, 50, 0), (80, 255, 255))
+        green_mask1 = cv2.inRange(img1_hsv, (40, 50, 0), (80, 255, 255))
+
 
         # set_trace()
         # mask creation for red marker (wraps around the values -> 2 parts)
@@ -329,37 +330,52 @@ if args.run:
 
         # morphological filtering (noise filtering and feature extraction)
         #Todo: cv2.getStructuringElement() can also be used
-        cv2.morphologyEx(marker_mask0, cv2.MORPH_ERODE, np.ones((5, 5), np.uint8), dst=marker_mask0, iterations=2)
-        cv2.morphologyEx(marker_mask0, cv2.MORPH_CLOSE, np.ones((17, 17), np.uint8), dst=marker_mask0)
-        cv2.morphologyEx(marker_mask0, cv2.MORPH_DILATE, np.ones((13, 13), np.uint8), dst=marker_mask0, iterations=2)
+        erode_se = 5
+        dilate_se = 7
+        close_se = 55
+        erode_iter = 2
 
-        cv2.morphologyEx(marker_mask1, cv2.MORPH_ERODE, np.ones((5, 5), np.uint8), dst=marker_mask1, iterations=2)
-        cv2.morphologyEx(marker_mask1, cv2.MORPH_CLOSE, np.ones((17, 17), np.uint8), dst=marker_mask1)
-        cv2.morphologyEx(marker_mask1, cv2.MORPH_DILATE, np.ones((13, 13), np.uint8), dst=marker_mask1, iterations=2)
+        cv2.morphologyEx(marker_mask0, cv2.MORPH_ERODE, np.ones((erode_se, erode_se), np.uint8), dst=marker_mask0, iterations=erode_iter)
+        cv2.morphologyEx(marker_mask0, cv2.MORPH_CLOSE, np.ones((close_se, close_se), np.uint8), dst=marker_mask0)
+        # cv2.morphologyEx(marker_mask0, cv2.MORPH_DILATE, np.ones((dilate_se, dilate_se), np.uint8), dst=marker_mask0, iterations=2)
+        #
+        cv2.morphologyEx(marker_mask1, cv2.MORPH_ERODE, np.ones((erode_se, erode_se), np.uint8), dst=marker_mask1, iterations=erode_iter)
+        cv2.morphologyEx(marker_mask1, cv2.MORPH_CLOSE, np.ones((close_se, close_se), np.uint8), dst=marker_mask1)
+        # cv2.morphologyEx(marker_mask1, cv2.MORPH_DILATE, np.ones((dilate_se, dilate_se), np.uint8), dst=marker_mask1, iterations=2)
 
 
 
         # threshold based on mask
-        ret, roi0 = cv2.threshold(cv2.GaussianBlur(cv2.bitwise_and(img0, marker_mask0), (9, 9), 0), 96, 255,
+        ret, roi0 = cv2.threshold(cv2.GaussianBlur(cv2.bitwise_and(img0, marker_mask0), (9, 9), 0), 48, 255,
                                    cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        ret, roi1 = cv2.threshold(cv2.GaussianBlur(cv2.bitwise_and(img1, marker_mask1), (9, 9), 0), 96, 255,
+        ret, roi1 = cv2.threshold(cv2.GaussianBlur(cv2.bitwise_and(img1, marker_mask1), (9, 9), 0), 48, 255,
                                    cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
 
+        # get contours
         _, contours, _ = cv2.findContours(roi0, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         roi0 = cv2.drawContours(roi0, contours, -1, 128, 3)
-        cnt = contours[0]
-        # set_trace()
-        if cnt.sum():
-            # set_trace()
-            # area = cv2.contourArea(cnt)
-            (x, y), radius = cv2.minEnclosingCircle(cnt)
-            center = (int(x), int(y))
-            radius = int(radius)
-            img = cv2.circle(roi0, center, radius, 255, 2)
 
-        cv2.imshow('0', roi0)
-        cv2.imshow('1', roi1)
+        # check only if there is some contour to find
+        if len(contours):
+            cnt = contours[0]
+
+            if cnt.sum():
+                rect = cv2.minAreaRect(cnt)
+                # get center point
+                (marker_x0, marker_y0), (_, _), _ = rect
+
+                # create image for remapping
+                center_img0 = np.zeros(roi0.shape)
+                center_img0[np.round(marker_x0).astype(np.uint8), np.round(marker_y0).astype(np.uint8)] = 255
+
+                box = cv2.boxPoints(rect)
+                box = np.int0(box)
+                cv2.drawContours(roi0, [box], 0, 128, 2)
+
+        cv2.imshow('0', frame0)
+        cv2.imshow('1', roi0)
+        # cv2.imshow('1', img1)
 
         # remap
         img0_rm = cv2.remap(img0, mx0, my0, cv2.INTER_LINEAR)
@@ -368,17 +384,26 @@ if args.run:
         # img0_rm = cv2.remap(cv2.bitwise_and(img0, roi0), mx0, my0, cv2.INTER_LINEAR)
         # img1_rm = cv2.remap(cv2.bitwise_and(img1, roi1), mx1, my1, cv2.INTER_LINEAR)
 
+
+        # center remap
+        # center0_rm = cv2.remap(center_img0, mx0, mx1, cv2.INTER_NEAREST)
+
         """Calculate the disparity map"""
         disparity_map = stereoBM_object.compute(img0_rm, img1_rm)
         cv2.filterSpeckles(disparity_map, 0, 16, 32) #filter out noise
 
+        # set_trace()
+        # get z coordinates
+        # z = disparity_map[center0_rm[center0_rm != 1]]
+
         # scale disparity map for displaying purposes only
         disparity_scaled = (disparity_map / 16.).astype(np.uint8) + abs(disparity_map.min())
+        # set_trace()
 
         # show the remapped images and the scaled disparity map
         # cv2.imshow('remapped0', img0_rm)
         # cv2.imshow('remapped1', img1_rm)
-        cv2.imshow('disp', disparity_scaled)
+        # cv2.imshow('disp', disparity_scaled)
 
         """Image reprojection into 3D"""
         #Todo: it would be great if this transform could be only used for the object (ROI)
