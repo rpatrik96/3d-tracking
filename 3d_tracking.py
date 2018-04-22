@@ -56,11 +56,24 @@ def mask_processing(mask, img):
         # check only if there is some contour to find
         if len(contours):
             cnt = contours[0]
+            max_area = cv2.contourArea(cnt)
+            for con in contours:
+                tmp_area = cv2.contourArea(con)
+                if tmp_area > max_area:
+                    cnt = con
+                    max_area = tmp_area
 
             if cnt.sum():
                 rect = cv2.minAreaRect(cnt)
+
+                # # get points for rectangle plot
+                # box = cv2.boxPoints(rect)
+                # box = np.int0(box)
+                # cv2.drawContours(roi, [box], 0, 128, 2)
                 # get center point
                 (marker_x0, marker_y0), (_, _), _ = rect
+
+    # cv2.imshow('roi', roi)
 
     return mask, roi, marker_x0, marker_y0
 
@@ -341,69 +354,85 @@ if args.run:
         img1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
 
         #Todo: filtering?/object localization?
-        """Thresholding"""
+        """RGB to HSV"""
 
         # color space to HSV
         img0_hsv = cv2.cvtColor(frame0, cv2.COLOR_BGR2HSV)
         img1_hsv = cv2.cvtColor(frame1, cv2.COLOR_BGR2HSV)
 
+
+        """Color masks"""
         # mask creation for green marker
         green_mask0 = cv2.inRange(img0_hsv, (40, 50, 0), (80, 255, 255))
         green_mask1 = cv2.inRange(img1_hsv, (40, 50, 0), (80, 255, 255))
 
-
-        # set_trace()
-        # mask creation for red marker (wraps around the values -> 2 parts)
-        red_mask0 = cv2.inRange(img0_hsv, (0, 40, 20), (10, 240, 200)) \
-                            + cv2.inRange(img0_hsv, (170, 40, 20), (179, 240, 200))
-        red_mask1 = cv2.inRange(img1_hsv, (0, 40, 20), (10, 240, 200)) \
-                            + cv2.inRange(img1_hsv, (170, 40, 20), (179, 240, 200))
-
+        # # mask creation for red marker (wraps around the values -> 2 parts)
+        # red_mask0 = cv2.inRange(img0_hsv, (0, 40, 20), (10, 240, 200)) \
+        #                     + cv2.inRange(img0_hsv, (170, 40, 20), (179, 240, 200))
+        # red_mask1 = cv2.inRange(img1_hsv, (0, 40, 20), (10, 240, 200)) \
+        #                     + cv2.inRange(img1_hsv, (170, 40, 20), (179, 240, 200))
 
         # blue mask
         blue_mask0 = cv2.inRange(img0_hsv, (90, 50, 0), (125, 255, 255))
         blue_mask1 = cv2.inRange(img1_hsv, (90, 50, 0), (125, 255, 255))
 
 
+        """Marker detection"""
         # morphological filtering (noise filtering and feature extraction)
-        #Todo: cv2.getStructuringElement() can also be used
 
         # green marker
         green_mask0, roi_g_0, gx0, gy0 = mask_processing(green_mask0, img0)
         green_mask1, roi_g_1, gx1, gy1 = mask_processing(green_mask1, img1)
 
         # blue marker
-        blue_mask0, roi_b_0, bx0, by0 = mask_processing(blue_mask0, img0)
-        blue_mask1, roi_b_1, bx1, by1 = mask_processing(blue_mask1, img1)
+        # blue_mask0, roi_b_0, bx0, by0 = mask_processing(blue_mask0, img0)
+        # blue_mask1, roi_b_1, bx1, by1 = mask_processing(blue_mask1, img1)
 
+
+        """Marker display"""
         # display center point of marker0
-        roi_b_0 = np.zeros(roi_b_0.shape)
-        cv2.circle(roi_b_0, (int(np.round(bx0)), int(np.round(by0))), 10, 255, 20)
+        marker_img0 = np.zeros(roi_g_0.shape)
+        marker_img1 = np.zeros(roi_g_1.shape)
 
-        cv2.imshow('0', frame0)
-        cv2.imshow('1', roi_b_0)
+        # image 0
+        # cv2.circle(marker_img0, (int(np.round(bx0)), int(np.round(by0))), 10, 255, 20)
+        cv2.circle(marker_img0, (int(np.round(gx0)), int(np.round(gy0))), 30, 128, 60)
+
+        # image 1
+        # cv2.circle(marker_img1, (int(np.round(bx1)), int(np.round(by1))), 10, 255, 20)
+        cv2.circle(marker_img1, (int(np.round(gx1)), int(np.round(gy1))), 30, 128, 60)
+
+        # cv2.imshow('0', marker_img0)
+        # cv2.imshow('1', marker_img1)
         # cv2.imshow('1', img1)
 
         # remap
         img0_rm = cv2.remap(img0, mx0, my0, cv2.INTER_LINEAR)
         img1_rm = cv2.remap(img1, mx1, my1, cv2.INTER_LINEAR)
 
-        # cv2.imshow('2', img0_rm)
-        # cv2.imshow('4', img1_rm)
+        marker0_rm = cv2.remap(marker_img0, mx0, my0, cv2.INTER_LINEAR)
+        marker1_rm = cv2.remap(marker_img1, mx1, my1, cv2.INTER_LINEAR)
+
+        cv2.imshow('a', img0_rm)
+        cv2.imshow('b', marker0_rm)
+        # set_trace()
+        # cv2.imshow('c', cv2.bitwise_and(marker0_rm.astype(np.uint8), img0_rm))
+
+        #todo: mask out everything but the markers
+        # img0_rm = cv2.bitwise_and(marker0_rm.astype(np.uint8), img0_rm)
+        # img1_rm = cv2.bitwise_and(marker1_rm.astype(np.uint8), img1_rm)
 
         #todo: select disparity based on this remapped roi
-        # cv2.imshow('3', cv2.remap(roi0, mx0, my0, cv2.INTER_LINEAR))
-
-        # img0_rm = cv2.remap(cv2.bitwise_and(img0, roi0), mx0, my0, cv2.INTER_LINEAR)
-        # img1_rm = cv2.remap(cv2.bitwise_and(img1, roi1), mx1, my1, cv2.INTER_LINEAR)
 
 
-        # center remap
-        # center0_rm = cv2.remap(center_img0, mx0, mx1, cv2.INTER_NEAREST)
 
         """Calculate the disparity map"""
         disparity_map = stereoBM_object.compute(img0_rm, img1_rm)
-        cv2.filterSpeckles(disparity_map, 0, 16, 32) #filter out noise
+        cv2.filterSpeckles(disparity_map, 0, 8, 16) #filter out noise
+
+        # set_trace()
+        # marker_d = stereoBM_object.compute(marker0_rm.astype(np.uint8), marker1_rm.astype(np.uint8))
+        # cv2.filterSpeckles(marker_d, 0, 16, 32)  # filter out noise
 
         # set_trace()
         # get z coordinates
@@ -411,17 +440,25 @@ if args.run:
 
         # scale disparity map for displaying purposes only
         disparity_scaled = (disparity_map / 16.).astype(np.uint8) + abs(disparity_map.min())
+
+        # m_d_scaler = (marker_d / 16.).astype(np.uint8) + abs(marker_d.min())
+
         # set_trace()
 
         # show the remapped images and the scaled disparity map
         # cv2.imshow('remapped0', img0_rm)
         # cv2.imshow('remapped1', img1_rm)
-        # cv2.imshow('disp', disparity_scaled)
+        cv2.imshow('disp', disparity_scaled)
+        # cv2.imshow('disp_mask', m_d_scaler)
 
         """Image reprojection into 3D"""
         #Todo: it would be great if this transform could be only used for the object (ROI)
         img_in_3d = cv2.reprojectImageTo3D(disparity_map, Q)
-        # cv2.imshow('3d', img_in_3d)
+        cv2.imshow('3d', img_in_3d)
+
+
+        # marker_in_3d = cv2.reprojectImageTo3D(marker_d, Q)
+        # cv2.imshow('marker3d', marker_in_3d)
 
         if cv2.waitKey(40) & 0xFF == ord('x'):
             break
