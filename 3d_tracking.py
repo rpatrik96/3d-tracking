@@ -28,7 +28,41 @@ Left arrow: 33
 Presentation play: 27 (ESC)
 Display hide: 190 (0xBE)
 """
+erode_se = 5
+dilate_se = 7
+close_se = 55
+erode_iter = 2
 
+def mask_processing(mask, img):
+
+    # erosion: let small particles vanish
+    cv2.morphologyEx(mask, cv2.MORPH_ERODE, np.ones((erode_se, erode_se), np.uint8), dst=mask,
+                     iterations=erode_iter)
+
+    # closing: stabilize detection
+    cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((close_se, close_se), np.uint8), dst=mask)
+
+    # cv2.morphologyEx(marker_mask0, cv2.MORPH_DILATE, np.ones((dilate_se, dilate_se), np.uint8), dst=marker_mask0, iterations=2)
+
+    ret, roi = cv2.threshold(cv2.GaussianBlur(cv2.bitwise_and(img, mask), (9, 9), 0), 48, 255,
+                              cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+
+    # get contours
+    marker_x0, marker_y0 = 0, 0 #if not found
+    if ret:
+        _, contours, _ = cv2.findContours(roi, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+        # check only if there is some contour to find
+        if len(contours):
+            cnt = contours[0]
+
+            if cnt.sum():
+                rect = cv2.minAreaRect(cnt)
+                # get center point
+                (marker_x0, marker_y0), (_, _), _ = rect
+
+    return mask, roi, marker_x0, marker_y0
 
 
 """-------------------------------------------------------------------------"""
@@ -295,9 +329,6 @@ if args.run:
     # create disparity matching object in advance
     stereoBM_object = cv2.StereoBM_create(numDisparities=128, blockSize=15)
 
-    # marker center point variables
-    marker_x0 = 0
-    marker_y0 = 0
 
     # start video acquisition loop
     while True:
@@ -328,77 +359,40 @@ if args.run:
         red_mask1 = cv2.inRange(img1_hsv, (0, 40, 20), (10, 240, 200)) \
                             + cv2.inRange(img1_hsv, (170, 40, 20), (179, 240, 200))
 
-        # mask composition
-        marker_mask0 = green_mask0 #+ red_mask0
-        marker_mask1 = green_mask1 #+ red_mask1
+
+        # blue mask
+        blue_mask0 = cv2.inRange(img0_hsv, (90, 50, 0), (125, 255, 255))
+        blue_mask1 = cv2.inRange(img1_hsv, (90, 50, 0), (125, 255, 255))
+
 
         # morphological filtering (noise filtering and feature extraction)
         #Todo: cv2.getStructuringElement() can also be used
-        erode_se = 5
-        dilate_se = 7
-        close_se = 55
-        erode_iter = 2
 
-        cv2.morphologyEx(marker_mask0, cv2.MORPH_ERODE, np.ones((erode_se, erode_se), np.uint8), dst=marker_mask0, iterations=erode_iter)
-        cv2.morphologyEx(marker_mask0, cv2.MORPH_CLOSE, np.ones((close_se, close_se), np.uint8), dst=marker_mask0)
-        # cv2.morphologyEx(marker_mask0, cv2.MORPH_DILATE, np.ones((dilate_se, dilate_se), np.uint8), dst=marker_mask0, iterations=2)
-        #
-        cv2.morphologyEx(marker_mask1, cv2.MORPH_ERODE, np.ones((erode_se, erode_se), np.uint8), dst=marker_mask1, iterations=erode_iter)
-        cv2.morphologyEx(marker_mask1, cv2.MORPH_CLOSE, np.ones((close_se, close_se), np.uint8), dst=marker_mask1)
-        # cv2.morphologyEx(marker_mask1, cv2.MORPH_DILATE, np.ones((dilate_se, dilate_se), np.uint8), dst=marker_mask1, iterations=2)
+        # green marker
+        green_mask0, roi_g_0, gx0, gy0 = mask_processing(green_mask0, img0)
+        green_mask1, roi_g_1, gx1, gy1 = mask_processing(green_mask1, img1)
 
-
-
-        # threshold based on mask
-        ret, roi0 = cv2.threshold(cv2.GaussianBlur(cv2.bitwise_and(img0, marker_mask0), (9, 9), 0), 48, 255,
-                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        ret, roi1 = cv2.threshold(cv2.GaussianBlur(cv2.bitwise_and(img1, marker_mask1), (9, 9), 0), 48, 255,
-                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-
-        # get contours
-        _, contours, _ = cv2.findContours(roi0, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-        # cv2.drawContours(roi0, contours, -1, 128, 3)
-
-        # check only if there is some contour to find
-        if len(contours):
-            cnt = contours[0]
-
-            if cnt.sum():
-                rect = cv2.minAreaRect(cnt)
-
-                # get center point
-                (marker_x0, marker_y0), (_, _), _ = rect
-                # print('x:', marker_x0, '\ty:', marker_y0)
-
-                # create image for remapping
-                # center_img0 = np.zeros(roi0.shape)
-                # center_img0[np.round(marker_x0).astype(np.uint8), np.round(marker_y0).astype(np.uint8)] = 255
-
-                # # get points for rectangle plot
-                # box = cv2.boxPoints(rect)
-                # box = np.int0(box)
-                # cv2.drawContours(roi0, [box], 0, 128, 2)
-
-                # reinit roi for displaying only the center point
+        # blue marker
+        blue_mask0, roi_b_0, bx0, by0 = mask_processing(blue_mask0, img0)
+        blue_mask1, roi_b_1, bx1, by1 = mask_processing(blue_mask1, img1)
 
         # display center point of marker0
-        roi0 = np.zeros(roi0.shape)
-        cv2.circle(roi0, (int(np.round(marker_x0)), int(np.round(marker_y0))), 10, 255, 20)
+        roi_b_0 = np.zeros(roi_b_0.shape)
+        cv2.circle(roi_b_0, (int(np.round(bx0)), int(np.round(by0))), 10, 255, 20)
 
         cv2.imshow('0', frame0)
-        cv2.imshow('1', roi0)
+        cv2.imshow('1', roi_b_0)
         # cv2.imshow('1', img1)
 
         # remap
         img0_rm = cv2.remap(img0, mx0, my0, cv2.INTER_LINEAR)
         img1_rm = cv2.remap(img1, mx1, my1, cv2.INTER_LINEAR)
 
-        cv2.imshow('2', img0_rm)
+        # cv2.imshow('2', img0_rm)
         # cv2.imshow('4', img1_rm)
 
         #todo: select disparity based on this remapped roi
-        cv2.imshow('3', cv2.remap(roi0, mx0, my0, cv2.INTER_LINEAR))
+        # cv2.imshow('3', cv2.remap(roi0, mx0, my0, cv2.INTER_LINEAR))
 
         # img0_rm = cv2.remap(cv2.bitwise_and(img0, roi0), mx0, my0, cv2.INTER_LINEAR)
         # img1_rm = cv2.remap(cv2.bitwise_and(img1, roi1), mx1, my1, cv2.INTER_LINEAR)
