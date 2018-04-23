@@ -18,7 +18,17 @@ from shutil import rmtree
 import numpy as np
 import cv2
 import h5py
+import matplotlib
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import time
 from pdb import set_trace
+
+matplotlib.rcParams['legend.fontsize'] = 10
+
+fig = plt.figure()
+ax = fig.gca(projection='3d')
+
 
 """
 Keycodes (presenter)
@@ -73,7 +83,7 @@ def mask_processing(mask, img):
                 # get center point
                 (marker_y0, marker_x0), (_, _), _ = rect
 
-    return mask, roi, marker_x0, marker_y0
+    return mask, roi, marker_x0, marker_y0, ret
 
 
 """-------------------------------------------------------------------------"""
@@ -360,8 +370,10 @@ if args.run:
     #                                          speckleWindowSize=140, speckleRange=1, uniquenessRatio=7)
 
     # center point lists
-    marker_b_list = []
-    marker_g_list = []
+    marker_b_array = np.ndarray((1,3))
+    marker_b_array[0] = (0,0,0)
+    marker_g_array= np.ndarray((1,3))
+    marker_g_array[0] = (0,0,0)
 
     # start video acquisition loop
     while True:
@@ -398,16 +410,16 @@ if args.run:
         """Marker detection"""
         """-------------------------------------------------------------------------"""
         # green marker
-        green_mask0, roi_g_0, gx0, gy0 = mask_processing(green_mask0, img0)
+        green_mask0, roi_g_0, gx0, gy0, ret_g = mask_processing(green_mask0, img0)
 
         # blue marker
-        blue_mask0, roi_b_0, bx0, by0 = mask_processing(blue_mask0, img0)
+        blue_mask0, roi_b_0, bx0, by0, ret_b = mask_processing(blue_mask0, img0)
 
         """-------------------------------------------------------------------------"""
         """Marker display"""
         """-------------------------------------------------------------------------"""
-        if args.display_markers:
-
+        # if args.display_markers:
+        if True:
             marker_img = np.zeros(roi_g_0.shape)   # create black image for display
 
             # draw circles
@@ -446,14 +458,34 @@ if args.run:
         """-------------------------------------------------------------------------"""
         """Marker coordianate logging"""
         """-------------------------------------------------------------------------"""
-        # get marker coordinates
-        marker_b_list.append(img_reproj[int(np.round(bx0)),int(np.round(by0))])
-        marker_g_list.append(img_reproj[int(np.round(gx0)),int(np.round(gy0))])
+        # append points only if both markers were found
+        # if ret_b and ret_g:
+        if True:
+            # get marker coordinates
+            # set_trace()
+            #todo: centerpoint filtering?
+            marker_b_array = np.append(marker_b_array, img_reproj[int(np.round(bx0)),int(np.round(by0))].reshape((1,3)), axis=0)
+            marker_g_array = np.append(marker_g_array, img_reproj[int(np.round(gx0)),int(np.round(gy0))].reshape((1,3)), axis=0)
+
+        else:
+            # append last element
+            # note if one of the markers were found and appended, then
+            # the geometry of the object could not have been guaranteed
+            marker_b_array = np.append(marker_b_array, marker_b_array[-1], axis=0)
+            marker_g_array = np.append(marker_g_array, marker_g_array[-1], axis=0)
+
+
+
 
         """-------------------------------------------------------------------------"""
         """Keyboard handling"""
         """-------------------------------------------------------------------------"""
         if cv2.waitKey(40) & 0xFF == ord('x'):
+            ax.plot(marker_b_array[:,0], marker_b_array[:,1], marker_b_array[:,2], label='blue marker')
+            ax.plot(marker_g_array[:,0], marker_g_array[:,1], marker_g_array[:,2], label='green marker')
+            ax.legend()
+            plt.show()
+            cv2.waitKey(-1)
             break
 
 
