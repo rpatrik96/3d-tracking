@@ -83,13 +83,21 @@ def mask_processing(mask, img):
 parser = argparse.ArgumentParser(description='3D position estimation based on stereo vision')
 
 parser.add_argument('--calibrate', action='store_true', default=False,
-                    help='calibration process will be carried out based on a checkerboard pattern')
+                    help='Calibration process will be carried out based on a checkerboard pattern')
 parser.add_argument('--run', action='store_true', default=True,
-                    help='displays the undistorted stereo video stream from 2 webcams')
+                    help='Displays the undistorted stereo video stream from 2 webcams')
 parser.add_argument('--force', action='store_true', default=False,
                     help='Overwrites existing files (e.g. calibration results)')
+parser.add_argument('--display-markers', action='store_true', default=False,
+                    help='Displays the marker centers')
+parser.add_argument('--display-disparity', action='store_true', default=False,
+                    help='Displays the disparity map')
+parser.add_argument('--display-reprojection', action='store_true', default=False,
+                    help='Displays the reprojected (3D) image')
 parser.add_argument('--calnum', type=int, default=10, metavar='N',
-                    help='number of images used for calibration (default: 10)')
+                    help='Number of images used for calibration (default: 10)')
+
+
 
 # Argument parsing
 args = parser.parse_args()
@@ -124,6 +132,7 @@ if args.calibrate:
 
     """-------------------------------------------------------------------------"""
     """Filesystem setup for calibration"""
+    """-------------------------------------------------------------------------"""
     camera_subdir0 = join(calibration_dir, "camera_0")      # subdirectory for the actual camera
     camera_subdir1 = join(calibration_dir, "camera_1")      # subdirectory for the actual camera
 
@@ -148,6 +157,7 @@ if args.calibrate:
 
     """-------------------------------------------------------------------------"""
     """Calibration setup"""
+    """-------------------------------------------------------------------------"""
     # termination criteria
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 1e-5)
 
@@ -264,13 +274,12 @@ if args.calibrate:
                 # append corner points to list
                 image_points1.append(corners_subpix1)
 
-
-
-
+    """-------------------------------------------------------------------------"""
     """
     Camera calibration for individual cameras 
     (results used as an initial guess for cv2.stereoCalibrate for a more robust result)
     """
+    """-------------------------------------------------------------------------"""
     ret0, camera_matrix0, dist_coeffs0, rot_vec0, t_vec0 = cv2.calibrateCamera(object_points, image_points0, img0.shape[::-1], None, None)
     ret1, camera_matrix1, dist_coeffs1, rot_vec1, t_vec1 = cv2.calibrateCamera(object_points, image_points1, img1.shape[::-1], None, None)
 
@@ -284,21 +293,28 @@ if args.calibrate:
     # flags |= cv2.CALIB_FIX_ASPECT_RATIO
     # flags |= cv2.CALIB_ZERO_TANGENT_DIST
 
+    """-------------------------------------------------------------------------"""
     """Stereo calibration"""
+    """-------------------------------------------------------------------------"""
     ret, M0, d0, M1, d1, R, T, E, F = cv2.stereoCalibrate(object_points, image_points0, image_points1,
                                       camera_matrix0, dist_coeffs0, camera_matrix1, dist_coeffs1,
                                       img0.shape[::-1], criteria=criteria, flags=flags)
 
+    """-------------------------------------------------------------------------"""
     """Stereo rectification"""
+    """-------------------------------------------------------------------------"""
     # Q holds the quintessence of the algorithm, the reprojection matrix
     R0, R1, P0, P1, Q, _, _ = cv2.stereoRectify(M0, d0, M1, d1, img0.shape[::-1], R, T)
 
-
+    """-------------------------------------------------------------------------"""
     """Distortion map calculation"""
+    """-------------------------------------------------------------------------"""
     mx0, my0 = cv2.initUndistortRectifyMap(M0, d0, R0, P0, img0.shape[::-1], cv2.CV_32FC1)
     mx1, my1 = cv2.initUndistortRectifyMap(M1, d1, R1, P1, img0.shape[::-1], cv2.CV_32FC1)
 
+    """-------------------------------------------------------------------------"""
     """Save parameters to file"""
+    """-------------------------------------------------------------------------"""
     # create file handle for the calibration results in hdf5 format
     with h5py.File(parameter_path, 'w') as f:
         # rectification maps for camera0
@@ -343,10 +359,9 @@ if args.run:
     # stereo_disparity = cv2.StereoSGBM_create(minDisparity=0, numDisparities=64, blockSize=13, disp12MaxDiff=16,
     #                                          speckleWindowSize=140, speckleRange=1, uniquenessRatio=7)
 
-
+    # center point lists
     marker_b_list = []
     marker_g_list = []
-
 
     # start video acquisition loop
     while True:
@@ -358,93 +373,93 @@ if args.run:
         img0 = cv2.cvtColor(frame0, cv2.COLOR_BGR2GRAY)
         img1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
 
-        #Todo: filtering?/object localization?
+        """-------------------------------------------------------------------------"""
         """RGB to HSV"""
+        """-------------------------------------------------------------------------"""
 
         # color space to HSV
         img0_hsv = cv2.cvtColor(frame0, cv2.COLOR_BGR2HSV)
         img1_hsv = cv2.cvtColor(frame1, cv2.COLOR_BGR2HSV)
 
-
+        """-------------------------------------------------------------------------"""
         """Color masks"""
+        """-------------------------------------------------------------------------"""
         # mask creation for green marker
         green_mask0 = cv2.inRange(img0_hsv, (40, 50, 0), (80, 255, 255))
-        # green_mask1 = cv2.inRange(img1_hsv, (40, 50, 0), (80, 255, 255))
-
-        # # mask creation for red marker (wraps around the values -> 2 parts)
-        # red_mask0 = cv2.inRange(img0_hsv, (0, 40, 20), (10, 240, 200)) \
-        #                     + cv2.inRange(img0_hsv, (170, 40, 20), (179, 240, 200))
-        # red_mask1 = cv2.inRange(img1_hsv, (0, 40, 20), (10, 240, 200)) \
-        #                     + cv2.inRange(img1_hsv, (170, 40, 20), (179, 240, 200))
 
         # blue mask
         blue_mask0 = cv2.inRange(img0_hsv, (90, 50, 0), (125, 255, 255))
-        # blue_mask1 = cv2.inRange(img1_hsv, (90, 50, 0), (125, 255, 255))
 
+        # # red mask (wraps around the values -> 2 parts)
+        # red_mask0 = cv2.inRange(img0_hsv, (0, 40, 20), (10, 240, 200)) \
+        #                     + cv2.inRange(img0_hsv, (170, 40, 20), (179, 240, 200))
 
+        """-------------------------------------------------------------------------"""
         """Marker detection"""
-        # morphological filtering (noise filtering and feature extraction)
-
+        """-------------------------------------------------------------------------"""
         # green marker
         green_mask0, roi_g_0, gx0, gy0 = mask_processing(green_mask0, img0)
-        # green_mask1, roi_g_1, gx1, gy1 = mask_processing(green_mask1, img1)
-        print(gx0,gy0)
 
         # blue marker
         blue_mask0, roi_b_0, bx0, by0 = mask_processing(blue_mask0, img0)
-        # blue_mask1, roi_b_1, bx1, by1 = mask_processing(blue_mask1, img1)
 
-
+        """-------------------------------------------------------------------------"""
         """Marker display"""
-        # display center point of marker0
-        marker_img0 = np.zeros(roi_g_0.shape)
-        # marker_img1 = np.zeros(roi_g_1.shape)
+        """-------------------------------------------------------------------------"""
+        if args.display_markers:
 
-        # image 0
-        cv2.circle(marker_img0, (int(np.round(bx0)), int(np.round(by0))), 10, 255, 20)
-        cv2.circle(marker_img0, (int(np.round(gx0)), int(np.round(gy0))), 30, 128, 60)
+            marker_img = np.zeros(roi_g_0.shape)   # create black image for display
 
-        # image 1
-        # cv2.circle(marker_img1, (int(np.round(bx1)), int(np.round(by1))), 10, 255, 20)
-        # cv2.circle(marker_img1, (int(np.round(gx1)), int(np.round(gy1))), 30, 128, 60)
+            # draw circles
+            cv2.circle(marker_img, (int(np.round(bx0)), int(np.round(by0))), 10, 255, 20)
+            cv2.circle(marker_img, (int(np.round(gx0)), int(np.round(gy0))), 30, 128, 40)
 
+            cv2.imshow('Markers', marker_img)
 
-        # remap
+        """-------------------------------------------------------------------------"""
+        """Remap"""
+        """-------------------------------------------------------------------------"""
         img0_rm = cv2.remap(img0, mx0, my0, cv2.INTER_LINEAR)
         img1_rm = cv2.remap(img1, mx1, my1, cv2.INTER_LINEAR)
 
-        cv2.imshow('a', img0_rm)
-        # set_trace()
-
-        #todo: mask out everything but the markers
-        # img0_rm = cv2.bitwise_and(marker0_rm.astype(np.uint8), img0_rm)
-        # img1_rm = cv2.bitwise_and(marker1_rm.astype(np.uint8), img1_rm)
-
-
-        """Calculate the disparity map"""
+        """-------------------------------------------------------------------------"""
+        """Disparity map calculation"""
+        """-------------------------------------------------------------------------"""
         disparity_map = stereo_disparity.compute(img0_rm, img1_rm)
-        # cv2.filterSpeckles(disparity_map, 0, 8, 16) #filter out noise
+        cv2.filterSpeckles(disparity_map, 0, 16, 128) #filter out noise
 
-        # scale disparity map for displaying purposes only
-        disparity_scaled = (disparity_map / 16.).astype(np.uint8) + abs(disparity_map.min())
+        if args.display_disparity:
+            # scale disparity map for displaying purposes only
+            disparity_scaled = (disparity_map / 16.).astype(np.uint8) + abs(disparity_map.min())
 
-        # show the remapped images and the scaled disparity map
-        cv2.imshow('disp', disparity_scaled)
+            # show the remapped images and the scaled disparity map
+            cv2.imshow('Disparity map', disparity_scaled)
 
+        """-------------------------------------------------------------------------"""
         """Image reprojection into 3D"""
-        #Todo: it would be great if this transform could be only used for the object (ROI)
-        img_in_3d = cv2.reprojectImageTo3D(disparity_map, Q)
-        # cv2.imshow('3d', img_in_3d)
+        """-------------------------------------------------------------------------"""
+        img_reproj = cv2.reprojectImageTo3D(disparity_map, Q)
 
-        # set_trace()
+        if args.display_reprojection:
+            cv2.imshow('3d', img_reproj)
+
+        """-------------------------------------------------------------------------"""
+        """Marker coordianate logging"""
+        """-------------------------------------------------------------------------"""
         # get marker coordinates
-        marker_b_list.append(img_in_3d[int(np.round(bx0)),int(np.round(by0))])
-        marker_g_list.append(img_in_3d[int(np.round(gx0)),int(np.round(gy0))])
+        marker_b_list.append(img_reproj[int(np.round(bx0)),int(np.round(by0))])
+        marker_g_list.append(img_reproj[int(np.round(gx0)),int(np.round(gy0))])
 
-
+        """-------------------------------------------------------------------------"""
+        """Keyboard handling"""
+        """-------------------------------------------------------------------------"""
         if cv2.waitKey(40) & 0xFF == ord('x'):
             break
 
+
+    """-------------------------------------------------------------------------"""
+    """Cleanup"""
+    """-------------------------------------------------------------------------"""
     # When everything done, release the capture
     capture_object0.release()
     capture_object1.release()
