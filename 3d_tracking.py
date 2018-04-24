@@ -24,12 +24,6 @@ from mpl_toolkits.mplot3d import Axes3D
 import time
 from pdb import set_trace
 
-matplotlib.rcParams['legend.fontsize'] = 10
-
-fig = plt.figure()
-ax = fig.gca(projection='3d')
-
-
 """
 Keycodes (presenter)
 
@@ -43,6 +37,15 @@ dilate_se = 7
 close_se = 55
 erode_iter = 2
 
+"""Plot setup"""
+matplotlib.rcParams['legend.fontsize'] = 10
+fig = plt.figure()
+ax = fig.gca(projection='3d')
+
+
+"""-------------------------------------------------------------------------"""
+"""----------------------------Mask processing------------------------------"""
+"""-------------------------------------------------------------------------"""
 def mask_processing(mask, img):
 
     # erosion: let small particles vanish
@@ -60,6 +63,7 @@ def mask_processing(mask, img):
 
     # get contours
     marker_x0, marker_y0 = 0, 0 #if not found
+    ret_marker = False  #flag for found marker
     if ret:
         _, contours, _ = cv2.findContours(roi, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -74,6 +78,8 @@ def mask_processing(mask, img):
                     max_area = tmp_area
 
             if cnt.sum():
+                ret_marker = True
+
                 rect = cv2.minAreaRect(cnt)
 
                 # # get points for rectangle plot
@@ -83,7 +89,10 @@ def mask_processing(mask, img):
                 # get center point
                 (marker_y0, marker_x0), (_, _), _ = rect
 
-    return mask, roi, marker_x0, marker_y0, ret
+    if marker_y0 is 0 and marker_x0 is 0 and ret_marker is True:
+        print('Ooops')
+
+    return mask, roi, marker_x0, marker_y0, ret_marker
 
 
 """-------------------------------------------------------------------------"""
@@ -459,20 +468,25 @@ if args.run:
         """Marker coordianate logging"""
         """-------------------------------------------------------------------------"""
         # append points only if both markers were found
-        # if ret_b and ret_g:
-        if True:
+        print(img_reproj[int(np.round(gx0)),int(np.round(gy0))].reshape((1,3)))
+        if ret_g: #and ret_b:
+        # if True:
             # get marker coordinates
             # set_trace()
             #todo: centerpoint filtering?
-            marker_b_array = np.append(marker_b_array, img_reproj[int(np.round(bx0)),int(np.round(by0))].reshape((1,3)), axis=0)
+            # marker_b_array = np.append(marker_b_array, img_reproj[int(np.round(bx0)),int(np.round(by0))].reshape((1,3)), axis=0)
             marker_g_array = np.append(marker_g_array, img_reproj[int(np.round(gx0)),int(np.round(gy0))].reshape((1,3)), axis=0)
 
         else:
             # append last element
+            pass
             # note if one of the markers were found and appended, then
             # the geometry of the object could not have been guaranteed
-            marker_b_array = np.append(marker_b_array, marker_b_array[-1], axis=0)
-            marker_g_array = np.append(marker_g_array, marker_g_array[-1], axis=0)
+            # marker_b_array = np.append(marker_b_array, marker_b_array[-1], axis=0)
+            # marker_g_array = np.append(marker_g_array, marker_g_array[-1], axis=0)
+
+        if len(marker_b_array) > 1 and marker_b_array[-1].sum() == 0:
+            set_trace()
 
 
 
@@ -481,8 +495,9 @@ if args.run:
         """Keyboard handling"""
         """-------------------------------------------------------------------------"""
         if cv2.waitKey(40) & 0xFF == ord('x'):
-            ax.plot(marker_b_array[:,0], marker_b_array[:,1], marker_b_array[:,2], label='blue marker')
-            ax.plot(marker_g_array[:,0], marker_g_array[:,1], marker_g_array[:,2], label='green marker')
+            # omit the first point (origin)
+            ax.plot(marker_b_array[1:,0], marker_b_array[1:,1], marker_b_array[1:,2], label='blue marker')
+            ax.plot(marker_g_array[1:,0], marker_g_array[1:,1], marker_g_array[1:,2], label='green marker')
             ax.legend()
             plt.show()
             cv2.waitKey(-1)
