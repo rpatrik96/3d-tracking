@@ -198,6 +198,10 @@ if args.calibrate:
     # record new images if needed
     if calibration_needed:
 
+        # image window names
+        winname0 = 'Calibration process for camera 0'
+        winname1 = 'Calibration process for camera 1'
+
         # indicates whether image is in a position to calibrate
         match_flag = False
         image_success = False
@@ -252,8 +256,8 @@ if args.calibrate:
 
 
                 # Display the resulting frame
-                cv2.imshow('Calibration process for camera0 ', img0)
-                cv2.imshow('Calibration process for camera1 ', img1)
+                cv2.imshow(winname0, img0)
+                cv2.imshow(winname1, img1)
 
                 if image_success:
                     cv2.waitKey(500)
@@ -262,6 +266,10 @@ if args.calibrate:
 
                 if cv2.waitKey(40) & 0xFF == 46:
                     match_flag = True
+
+        # close windows
+        cv2.destroyWindow(winname0)
+        cv2.destroyWindow(winname1)
 
 
     else:
@@ -299,8 +307,8 @@ if args.calibrate:
     (results used as an initial guess for cv2.stereoCalibrate for a more robust result)
     """
     """-------------------------------------------------------------------------"""
-    ret0, camera_matrix0, dist_coeffs0, rot_vec0, t_vec0 = cv2.calibrateCamera(object_points, image_points0, img0.shape[::-1], None, None)
-    ret1, camera_matrix1, dist_coeffs1, rot_vec1, t_vec1 = cv2.calibrateCamera(object_points, image_points1, img1.shape[::-1], None, None)
+    ret0, camera_matrix0, dist_coeffs0, rot_vec0, t_vec0 = cv2.calibrateCamera(object_points, image_points0, img0.shape[0:2][::-1], None, None)
+    ret1, camera_matrix1, dist_coeffs1, rot_vec1, t_vec1 = cv2.calibrateCamera(object_points, image_points1, img1.shape[0:2][::-1], None, None)
 
 
     # set flag values
@@ -317,19 +325,19 @@ if args.calibrate:
     """-------------------------------------------------------------------------"""
     ret, M0, d0, M1, d1, R, T, E, F = cv2.stereoCalibrate(object_points, image_points0, image_points1,
                                       camera_matrix0, dist_coeffs0, camera_matrix1, dist_coeffs1,
-                                      img0.shape[::-1], criteria=criteria, flags=flags)
+                                      img0.shape[0:2][::-1], criteria=criteria, flags=flags)
 
     """-------------------------------------------------------------------------"""
     """Stereo rectification"""
     """-------------------------------------------------------------------------"""
     # Q holds the quintessence of the algorithm, the reprojection matrix
-    R0, R1, P0, P1, Q, _, _ = cv2.stereoRectify(M0, d0, M1, d1, img0.shape[::-1], R, T)
+    R0, R1, P0, P1, Q, _, _ = cv2.stereoRectify(M0, d0, M1, d1, img0.shape[0:2][::-1], R, T)
 
     """-------------------------------------------------------------------------"""
     """Distortion map calculation"""
     """-------------------------------------------------------------------------"""
-    mx0, my0 = cv2.initUndistortRectifyMap(M0, d0, R0, P0, img0.shape[::-1], cv2.CV_32FC1)
-    mx1, my1 = cv2.initUndistortRectifyMap(M1, d1, R1, P1, img0.shape[::-1], cv2.CV_32FC1)
+    mx0, my0 = cv2.initUndistortRectifyMap(M0, d0, R0, P0, img0.shape[0:2][::-1], cv2.CV_32FC1)
+    mx1, my1 = cv2.initUndistortRectifyMap(M1, d1, R1, P1, img0.shape[0:2][::-1], cv2.CV_32FC1)
 
     """-------------------------------------------------------------------------"""
     """Save parameters to file"""
