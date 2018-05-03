@@ -263,7 +263,7 @@ if args.calibrate:
                     cv2.waitKey(500)
                     image_success = False
 
-
+                # watch out for the key which switches on the search for chessboard corners
                 if cv2.waitKey(40) & 0xFF == 46:
                     match_flag = True
 
@@ -457,17 +457,21 @@ if args.run:
         disparity_map = stereo_disparity.compute(img0_rm, img1_rm)
         cv2.filterSpeckles(disparity_map, 0, 16, 128) #filter out noise
 
-        if args.display_disparity:
-            # scale disparity map for displaying purposes only
-            disparity_scaled = (disparity_map / 16.).astype(np.uint8) + abs(disparity_map.min())
 
-            # show the remapped images and the scaled disparity map
-            cv2.imshow('Disparity map', disparity_scaled)
+        # compute disparity image from undistorted and rectified versions
+        # (which for reasons best known to the OpenCV developers is returned scaled by 16)
+        # credit goes to Toby Breckon, Durham University, UK for sharing this caveat
+        disparity_scaled = (disparity_map / 16.).astype(np.uint8)
+
+        if args.display_disparity:
+            # show the remapped images and the scaled disparity map (modified for 8 bit display)
+            cv2.imshow('Disparity map', disparity_scaled + abs(disparity_map.min()))
 
         """-------------------------------------------------------------------------"""
         """Image reprojection into 3D"""
         """-------------------------------------------------------------------------"""
-        img_reproj = cv2.reprojectImageTo3D(disparity_map, Q)
+        # use disparity scaled
+        img_reproj = cv2.reprojectImageTo3D(disparity_scaled, Q)
 
         if args.display_reprojection:
             cv2.imshow('3d', img_reproj)
@@ -495,8 +499,6 @@ if args.run:
 
         if len(marker_b_array) > 1 and marker_b_array[-1].sum() == 0:
             set_trace()
-
-
 
 
         """-------------------------------------------------------------------------"""
