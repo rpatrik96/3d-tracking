@@ -55,7 +55,7 @@ def mask_processing(mask, img):
     # closing: stabilize detection
     cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((close_se, close_se), np.uint8), dst=mask)
 
-    # cv2.morphologyEx(marker_mask0, cv2.MORPH_DILATE, np.ones((dilate_se, dilate_se), np.uint8), dst=marker_mask0, iterations=2)
+    # cv2.morphologyEx(mask, cv2.MORPH_DILATE, np.ones((dilate_se, dilate_se), np.uint8), dst=mask, iterations=2)
 
     ret, roi = cv2.threshold(cv2.GaussianBlur(cv2.bitwise_and(img, mask), (9, 9), 0), 48, 255,
                               cv2.THRESH_BINARY + cv2.THRESH_OTSU)
@@ -113,8 +113,8 @@ parser.add_argument('--display-disparity', action='store_true', default=False,
                     help='Displays the disparity map')
 parser.add_argument('--display-reprojection', action='store_true', default=False,
                     help='Displays the reprojected (3D) image')
-parser.add_argument('--calnum', type=int, default=10, metavar='N',
-                    help='Number of images used for calibration (default: 10)')
+parser.add_argument('--calnum', type=int, default=15, metavar='N',
+                    help='Number of images used for calibration (default: 15)')
 
 
 
@@ -210,8 +210,11 @@ if args.calibrate:
         while len(image_points0) is not args.calnum:
 
             # Capture frame-by-frame
-            ret0, frame0 = capture_object0.read()
-            ret1, frame1 = capture_object1.read()
+            capture_object0.grab()
+            capture_object1.grab()
+
+            ret0, frame0 = capture_object0.retrieve()
+            ret1, frame1 = capture_object1.retrieve()
 
             # proceed only if capture was succesful
             if ret0 and ret1 is True:
@@ -265,7 +268,7 @@ if args.calibrate:
 
                 # watch out for the key which switches on the search for chessboard corners
                 if cv2.waitKey(40) & 0xFF == 46:
-                    match_flag = True
+                    match_flag = (not match_flag)
 
         # close windows
         cv2.destroyWindow(winname0)
@@ -310,28 +313,44 @@ if args.calibrate:
     ret0, camera_matrix0, dist_coeffs0, rot_vec0, t_vec0 = cv2.calibrateCamera(object_points, image_points0, img0.shape[0:2][::-1], None, None)
     ret1, camera_matrix1, dist_coeffs1, rot_vec1, t_vec1 = cv2.calibrateCamera(object_points, image_points1, img1.shape[0:2][::-1], None, None)
 
+    tot_errorL = 0
+    for i in range(len(object_points)):
+        imgpointsL2, _ = cv2.projectPoints(object_points[i], rot_vec0[i], t_vec0[i], camera_matrix0, dist_coeffs0)
+        errorL = cv2.norm(image_points0[i], imgpointsL2, cv2.NORM_L2) / len(imgpointsL2)
+        tot_errorL += errorL
 
+    print("LEFT: Re-projection error: ", tot_errorL / len(object_points))
+
+    tot_errorR = 0
+    for i in range(len(object_points)):
+        imgpointsR2, _ = cv2.projectPoints(object_points[i], rot_vec1[i], t_vec1[i], camera_matrix1, dist_coeffs1)
+        errorR = cv2.norm(image_points1[i], imgpointsR2, cv2.NORM_L2) / len(imgpointsR2)
+        tot_errorR += errorR
+
+    print("RIGHT: Re-projection error: ", tot_errorR / len(object_points))
+    
     # set flag values
     flags = 0
     # flags |= cv2.CALIB_FIX_INTRINSIC
     # flags |= cv2.CALIB_FIX_PRINCIPAL_POINT
-    flags |= cv2.CALIB_USE_INTRINSIC_GUESS
-    flags |= cv2.CALIB_FIX_FOCAL_LENGTH
+    # flags |= cv2.CALIB_USE_INTRINSIC_GUESS
+    # flags |= cv2.CALIB_FIX_FOCAL_LENGTH
     # flags |= cv2.CALIB_FIX_ASPECT_RATIO
     # flags |= cv2.CALIB_ZERO_TANGENT_DIST
 
     """-------------------------------------------------------------------------"""
     """Stereo calibration"""
     """-------------------------------------------------------------------------"""
-    ret, M0, d0, M1, d1, R, T, E, F = cv2.stereoCalibrate(object_points, image_points0, image_points1,
+    rms_stereo, M0, d0, M1, d1, R, T, E, F = cv2.stereoCalibrate(object_points, image_points0, image_points1,
                                       camera_matrix0, dist_coeffs0, camera_matrix1, dist_coeffs1,
                                       img0.shape[0:2][::-1], criteria=criteria, flags=flags)
-
+    
+    print("STEREO: RMS left to  right re-projection error: ", rms_stereo)
     """-------------------------------------------------------------------------"""
     """Stereo rectification"""
     """-------------------------------------------------------------------------"""
     # Q holds the quintessence of the algorithm, the reprojection matrix
-    R0, R1, P0, P1, Q, _, _ = cv2.stereoRectify(M0, d0, M1, d1, img0.shape[0:2][::-1], R, T)
+    R0, R1, P0, P1, Q, _, _ = cv2.stereoRectify(M0, d0, M1, d1, img0.shape[0:2][::-1], R, T, alpha=-1, flags=cv2.CALIB_ZERO_DISPARITY)
 
     """-------------------------------------------------------------------------"""
     """Distortion map calculation"""
@@ -355,7 +374,7 @@ if args.calibrate:
         # rerojection matrix
         f.create_dataset("Q", data=Q)
 
-
+    # set_trace()
 if args.run:
     if not isfile(parameter_path):
         print("Calibration is needed to proceed, please run the program with the --calibrate flag")
@@ -381,7 +400,9 @@ if args.run:
         Q = f['Q'][()]
 
     # create disparity matching object in advance
-    stereo_disparity = cv2.StereoBM_create(numDisparities=64, blockSize=13)
+    # stereo_disparity = cv2.StereoBM_create(numDisparities=128, blockSize=15)
+    stereo_disparity = cv2.StereoSGBM_create(-16, 16, 5)
+
     #todo: maybe use cv2.StereoSGBM_create() ?
     # stereo_disparity = cv2.StereoSGBM_create(minDisparity=0, numDisparities=64, blockSize=13, disp12MaxDiff=16,
     #                                          speckleWindowSize=140, speckleRange=1, uniquenessRatio=7)
@@ -395,12 +416,17 @@ if args.run:
     # start video acquisition loop
     while True:
         # Capture frame-by-frame
-        ret0, frame0 = capture_object0.read()
-        ret1, frame1 = capture_object1.read()
+        capture_object0.grab()
+        capture_object1.grab()
+
+        ret0, frame0 = capture_object0.retrieve()
+        ret1, frame1 = capture_object1.retrieve()
 
         # read the camera streams
         img0 = cv2.cvtColor(frame0, cv2.COLOR_BGR2GRAY)
         img1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
+        # cv2.imshow('im0', img0)
+        # cv2.imshow('im1', img1)
 
         """-------------------------------------------------------------------------"""
         """RGB to HSV"""
@@ -414,10 +440,10 @@ if args.run:
         """Color masks"""
         """-------------------------------------------------------------------------"""
         # mask creation for green marker
-        green_mask0 = cv2.inRange(img0_hsv, (40, 50, 0), (80, 255, 255))
+        green_mask0 = cv2.inRange(img0_hsv, (40, 30, 0), (80, 255, 255))
 
         # blue mask
-        blue_mask0 = cv2.inRange(img0_hsv, (90, 50, 0), (125, 255, 255))
+        blue_mask0 = cv2.inRange(img0_hsv, (90, 50, 0), (125, 225, 225))
 
         # # red mask (wraps around the values -> 2 parts)
         # red_mask0 = cv2.inRange(img0_hsv, (0, 40, 20), (10, 240, 200)) \
@@ -444,28 +470,36 @@ if args.run:
             cv2.circle(marker_img, (int(np.round(gx0)), int(np.round(gy0))), 30, 128, 40)
 
             cv2.imshow('Markers', marker_img)
+            cv2.imshow('roi', roi_g_0)
 
         """-------------------------------------------------------------------------"""
         """Remap"""
         """-------------------------------------------------------------------------"""
         img0_rm = cv2.remap(img0, mx0, my0, cv2.INTER_LINEAR)
         img1_rm = cv2.remap(img1, mx1, my1, cv2.INTER_LINEAR)
+        # cv2.imshow('rm0', img0_rm)
+        # cv2.imshow('rm1', img1_rm)
 
         """-------------------------------------------------------------------------"""
         """Disparity map calculation"""
         """-------------------------------------------------------------------------"""
         disparity_map = stereo_disparity.compute(img0_rm, img1_rm)
-        cv2.filterSpeckles(disparity_map, 0, 16, 128) #filter out noise
+        # cv2.filterSpeckles(disparity_map, 0, 16, 128) #filter out noise
+        cv2.filterSpeckles(disparity_map, 0, 40, 128)
 
 
         # compute disparity image from undistorted and rectified versions
         # (which for reasons best known to the OpenCV developers is returned scaled by 16)
         # credit goes to Toby Breckon, Durham University, UK for sharing this caveat
-        disparity_scaled = (disparity_map / 16.).astype(np.uint8)
+        # disparity_scaled = disparity_map.astype(np.float32) / 16.0
+        # set_trace()
+        disparity_scaled = (disparity_map / 16.).astype(np.float32) + abs(disparity_map.min())#/16.0
+        # set_trace()
+
 
         if args.display_disparity:
             # show the remapped images and the scaled disparity map (modified for 8 bit display)
-            cv2.imshow('Disparity map', disparity_scaled + abs(disparity_map.min()))
+            cv2.imshow('Disparity map', (disparity_map / 16.).astype(np.uint16) + abs(disparity_map.min()))
 
         """-------------------------------------------------------------------------"""
         """Image reprojection into 3D"""
@@ -477,16 +511,17 @@ if args.run:
             cv2.imshow('3d', img_reproj)
 
         """-------------------------------------------------------------------------"""
-        """Marker coordianate logging"""
+        """Marker coordinate logging"""
         """-------------------------------------------------------------------------"""
         # append points only if both markers were found
         print(img_reproj[int(np.round(gx0)),int(np.round(gy0))].reshape((1,3)))
+        # print(disparity_map.min(), disparity_map.max(), disparity_scaled.min(), disparity_scaled.max(), img_reproj[:,:,2].min(),img_reproj[:,:,2].max())
         if ret_g: #and ret_b:
         # if True:
             # get marker coordinates
             # set_trace()
             #todo: centerpoint filtering?
-            # marker_b_array = np.append(marker_b_array, img_reproj[int(np.round(bx0)),int(np.round(by0))].reshape((1,3)), axis=0)
+            marker_b_array = np.append(marker_b_array, img_reproj[int(np.round(bx0)),int(np.round(by0))].reshape((1,3)), axis=0)
             marker_g_array = np.append(marker_g_array, img_reproj[int(np.round(gx0)),int(np.round(gy0))].reshape((1,3)), axis=0)
 
         else:
@@ -505,9 +540,10 @@ if args.run:
         """Keyboard handling"""
         """-------------------------------------------------------------------------"""
         if cv2.waitKey(40) & 0xFF == ord('x'):
+            # set_trace()
             # omit the first point (origin)
-            ax.plot(marker_b_array[1:,0], marker_b_array[1:,1], marker_b_array[1:,2], label='blue marker')
-            ax.plot(marker_g_array[1:,0], marker_g_array[1:,1], marker_g_array[1:,2], label='green marker')
+            ax.scatter(marker_b_array[1:,0], marker_b_array[1:,1], marker_b_array[1:,2], label='blue marker')
+            ax.scatter(marker_g_array[1:,0], marker_g_array[1:,1], marker_g_array[1:,2], label='green marker', c='g')
             ax.legend()
             plt.show()
             cv2.waitKey(-1)
