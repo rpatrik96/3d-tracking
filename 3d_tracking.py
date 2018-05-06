@@ -400,14 +400,41 @@ if args.run:
         Q = f['Q'][()]
 
     # create disparity matching object in advance
-    # stereo_disparity = cv2.StereoBM_create(numDisparities=128, blockSize=15)
+    # stereo_disparity = cv2.StereoBM_create(numDisparities=64, blockSize=13)
+    left_matcher = cv2.StereoBM_create(numDisparities=128, blockSize=5)
 
     # the bigger numDisparity is, the bigger the range of the z cootdinate
-    stereo_disparity = cv2.StereoSGBM_create(-16, 96, 17 )#, 32, 64, 32, speckleWindowSize=60, speckleRange=1)
+    # blockSize = 17
+    # stereo_disparity = cv2.StereoSGBM_create(-16, 96, blockSize, 3*blockSize*blockSize, 16*blockSize*blockSize, 16, speckleWindowSize=0, speckleRange=1)
 
     #todo: maybe use cv2.StereoSGBM_create() ?
     # stereo_disparity = cv2.StereoSGBM_create(minDisparity=0, numDisparities=64, blockSize=13, disp12MaxDiff=16,
     #                                          speckleWindowSize=140, speckleRange=1, uniquenessRatio=7)
+    window_size = 3
+    # left_matcher = cv2.StereoSGBM_create(
+        # minDisparity=0,
+        # numDisparities=96,
+        # blockSize=window_size,
+        # P1=8*5*window_size**2,
+        # P2=16 * 5 * window_size ** 2,
+        # disp12MaxDiff=1,
+        # uniquenessRatio=15,
+        # speckleWindowSize=0,
+        # speckleRange=2,
+        # preFilterCap=63,
+       # mode=cv2.STEREO_SGBM_MODE_SGBM_3WAY
+    # )
+    right_matcher = cv2.ximgproc.createRightMatcher(left_matcher)
+    # FILTER Parameters
+    lmbda = 80000
+    sigma = 1.0
+    visual_multiplier = 1.0
+
+    wls_filter = cv2.ximgproc.createDisparityWLSFilter(matcher_left=left_matcher)
+    wls_filter.setLambda(lmbda)
+    wls_filter.setSigmaColor(sigma)
+
+
 
     # center point lists
     marker_b_array = np.ndarray((1,3))
@@ -451,21 +478,31 @@ if args.run:
         # red_mask0 = cv2.inRange(img0_hsv, (0, 40, 20), (10, 240, 200)) \
         #                     + cv2.inRange(img0_hsv, (170, 40, 20), (179, 240, 200))
 
+
+        """-------------------------------------------------------------------------"""
+        """Remap"""
+        """-------------------------------------------------------------------------"""
+        img0_rm = cv2.remap(img0, mx0, my0, cv2.INTER_LINEAR)
+        img1_rm = cv2.remap(img1, mx1, my1, cv2.INTER_LINEAR)
+        cv2.imshow('rm0', img0_rm)
+        cv2.imshow('rm1', img1_rm)
+
+
         """-------------------------------------------------------------------------"""
         """Marker detection"""
         """-------------------------------------------------------------------------"""
         # green marker
-        green_mask0, roi_g_0, gx0, gy0, ret_g = mask_processing(green_mask0, img0)
+        green_mask0, roi_g_0, gx0, gy0, ret_g = mask_processing(green_mask0, img0_rm)
 
         # blue marker
-        blue_mask0, roi_b_0, bx0, by0, ret_b = mask_processing(blue_mask0, img0)
+        blue_mask0, roi_b_0, bx0, by0, ret_b = mask_processing(blue_mask0, img0_rm)
 
         """-------------------------------------------------------------------------"""
         """Marker display"""
         """-------------------------------------------------------------------------"""
         # if args.display_markers:
         if True:
-            marker_img = np.zeros(roi_g_0.shape)   # create black image for display
+            marker_img = np.zeros(roi_g_0.shape)  # create black image for display
 
             # draw circles
             cv2.circle(marker_img, (int(np.round(bx0)), int(np.round(by0))), 10, 255, 20)
@@ -475,39 +512,42 @@ if args.run:
             cv2.imshow('roi', roi_g_0)
 
         """-------------------------------------------------------------------------"""
-        """Remap"""
-        """-------------------------------------------------------------------------"""
-        img0_rm = cv2.remap(img0, mx0, my0, cv2.INTER_LINEAR)
-        img1_rm = cv2.remap(img1, mx1, my1, cv2.INTER_LINEAR)
-        # cv2.imshow('rm0', img0_rm)
-        # cv2.imshow('rm1', img1_rm)
-
-        """-------------------------------------------------------------------------"""
         """Disparity map calculation"""
         """-------------------------------------------------------------------------"""
-        disparity_map = stereo_disparity.compute(img0_rm, img1_rm)
-        # cv2.filterSpeckles(disparity_map, 0, 16, 128) #filter out noise
-        cv2.filterSpeckles(disparity_map, 0, 1024, 32)
+        # disparity_map = stereo_disparity.compute(img0_rm, img1_rm)
+        # cv2.filterSpeckles(disparity_map, 0, 64, 32) #filter out noise
+        # cv2.filterSpeckles(disparity_map, 0, 512, 32)
+
 
 
         # compute disparity image from undistorted and rectified versions
         # (which for reasons best known to the OpenCV developers is returned scaled by 16)
         # credit goes to Toby Breckon, Durham University, UK for sharing this caveat
-        # disparity_scaled = disparity_map.astype(np.float32) / 16.0
+        # disparity_scaled = disparity_map
         # set_trace()
-        disparity_scaled = (disparity_map / 16.).astype(np.float32) + abs(disparity_map.min())
+        # disparity_scaled = (disparity_map / 16.).astype(np.float32) + abs(disparity_map.min())
         # set_trace()
 
 
         if args.display_disparity:
             # show the remapped images and the scaled disparity map (modified for 8 bit display)
-            cv2.imshow('Disparity map', (disparity_map / 16.).astype(np.uint8))# + abs(disparity_map.min()))
+            # cv2.imshow('Disparity map', (disparity_map / 16.).astype(np.uint8))# + abs(disparity_map.min()))
+            pass
+
+        displ = left_matcher.compute(img0, img1).astype(np.float32)/16.
+        dispr = right_matcher.compute(img0, img1).astype(np.float32)/16.
+        displ = np.int16(displ)
+        dispr = np.int16(dispr)
+        filteredImg = wls_filter.filter(displ, img0_rm, None, dispr)  # important to put "imgL" here!!!
+        filteredImg2 = cv2.normalize(src=filteredImg, dst=filteredImg, beta=0, alpha=255, norm_type=cv2.NORM_MINMAX);
+        filteredImg2 = np.uint8(filteredImg2)
+        cv2.imshow('Disparity Map', filteredImg2)
 
         """-------------------------------------------------------------------------"""
         """Image reprojection into 3D"""
         """-------------------------------------------------------------------------"""
         # use disparity scaled
-        img_reproj = cv2.reprojectImageTo3D(disparity_scaled, Q)
+        img_reproj = cv2.reprojectImageTo3D(filteredImg, Q)
 
         if args.display_reprojection:
             cv2.imshow('3d', img_reproj)
@@ -518,6 +558,7 @@ if args.run:
         # append points only if both markers were found
         print(img_reproj[int(np.round(gx0)),int(np.round(gy0))].reshape((1,3)))
         # print(disparity_map.min(), disparity_map.max(), disparity_scaled.min(), disparity_scaled.max(), img_reproj[:,:,2].min(),img_reproj[:,:,2].max())
+        # print(filteredImg.min(), filteredImg.max(), img_reproj[:,:,2].min(),img_reproj[:,:,2].max())
         if ret_g: #and ret_b:
         # if True:
             # get marker coordinates
@@ -544,10 +585,13 @@ if args.run:
         if cv2.waitKey(40) & 0xFF == 27:
             # set_trace()
             # omit the first point (origin)
-            # ax.scatter(marker_b_array[1:,0], marker_b_array[1:,1], marker_b_array[1:,2], label='blue marker')
-            # ax.scatter(marker_g_array[1:,0], marker_g_array[1:,1], marker_g_array[1:,2], label='green marker', c='g')
-            # ax.legend()
-            # plt.show()
+            ax.scatter(marker_b_array[1:,0], marker_b_array[1:,1], marker_b_array[1:,2], label='blue marker')
+            ax.scatter(marker_g_array[1:,0], marker_g_array[1:,1], marker_g_array[1:,2], label='green marker', c='g')
+            ax.set_xlim(-1, 1)
+            ax.set_ylim(-1, 1)
+            ax.set_zlim(-1, 1)
+            ax.legend()
+            plt.show()
             break
 
 
