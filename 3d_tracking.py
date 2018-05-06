@@ -407,9 +407,7 @@ if args.run:
     # blockSize = 17
     # stereo_disparity = cv2.StereoSGBM_create(-16, 96, blockSize, 3*blockSize*blockSize, 16*blockSize*blockSize, 16, speckleWindowSize=0, speckleRange=1)
 
-    #todo: maybe use cv2.StereoSGBM_create() ?
-    # stereo_disparity = cv2.StereoSGBM_create(minDisparity=0, numDisparities=64, blockSize=13, disp12MaxDiff=16,
-    #                                          speckleWindowSize=140, speckleRange=1, uniquenessRatio=7)
+
     window_size = 3
     # left_matcher = cv2.StereoSGBM_create(
         # minDisparity=0,
@@ -529,19 +527,19 @@ if args.run:
         # set_trace()
 
 
-        if args.display_disparity:
-            # show the remapped images and the scaled disparity map (modified for 8 bit display)
-            # cv2.imshow('Disparity map', (disparity_map / 16.).astype(np.uint8))# + abs(disparity_map.min()))
-            pass
 
         displ = left_matcher.compute(img0, img1).astype(np.float32)/16.
         dispr = right_matcher.compute(img0, img1).astype(np.float32)/16.
         displ = np.int16(displ)
         dispr = np.int16(dispr)
-        filteredImg = wls_filter.filter(displ, img0_rm, None, dispr)  # important to put "imgL" here!!!
-        filteredImg2 = cv2.normalize(src=filteredImg, dst=filteredImg, beta=0, alpha=255, norm_type=cv2.NORM_MINMAX);
-        filteredImg2 = np.uint8(filteredImg2)
-        cv2.imshow('Disparity Map', filteredImg2)
+        filteredImg = wls_filter.filter(displ, img0_rm, None, dispr)  # important to put the left image here!!!
+
+        if args.display_disparity:
+            # show the remapped images and the scaled disparity map (modified for 8 bit display)
+            # cv2.imshow('Disparity map', (disparity_map / 16.).astype(np.uint8))# + abs(disparity_map.min()))
+            filteredImg2 = cv2.normalize(src=filteredImg, dst=filteredImg, beta=0, alpha=255, norm_type=cv2.NORM_MINMAX);
+            filteredImg2 = np.uint8(filteredImg2)
+            cv2.imshow('Disparity Map', filteredImg2)
 
         """-------------------------------------------------------------------------"""
         """Image reprojection into 3D"""
@@ -564,7 +562,7 @@ if args.run:
             # get marker coordinates
             # set_trace()
             #todo: centerpoint filtering?
-            marker_b_array = np.append(marker_b_array, img_reproj[int(np.round(bx0)),int(np.round(by0))].reshape((1,3)), axis=0)
+            # marker_b_array = np.append(marker_b_array, img_reproj[int(np.round(bx0)),int(np.round(by0))].reshape((1,3)), axis=0)
             marker_g_array = np.append(marker_g_array, img_reproj[int(np.round(gx0)),int(np.round(gy0))].reshape((1,3)), axis=0)
 
         else:
@@ -587,9 +585,9 @@ if args.run:
             # omit the first point (origin)
             ax.scatter(marker_b_array[1:,0], marker_b_array[1:,1], marker_b_array[1:,2], label='blue marker')
             ax.scatter(marker_g_array[1:,0], marker_g_array[1:,1], marker_g_array[1:,2], label='green marker', c='g')
-            ax.set_xlim(-1, 1)
-            ax.set_ylim(-1, 1)
-            ax.set_zlim(-1, 1)
+            ax.set_xlim(max(-1,marker_g_array[1:,0].min()), min(1,marker_g_array[1:,0].max()))
+            ax.set_ylim(max(-1,marker_g_array[1:,1].min()), min(1,marker_g_array[1:,1].max()))
+            ax.set_zlim(max(-1,marker_g_array[1:,2].min()), min(1,marker_g_array[1:,2].max()))
             ax.legend()
             plt.show()
             break
