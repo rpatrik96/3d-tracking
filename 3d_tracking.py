@@ -333,10 +333,10 @@ if args.calibrate:
     flags = 0
     # flags |= cv2.CALIB_FIX_INTRINSIC
     # flags |= cv2.CALIB_FIX_PRINCIPAL_POINT
-    # flags |= cv2.CALIB_USE_INTRINSIC_GUESS
+    flags |= cv2.CALIB_USE_INTRINSIC_GUESS
     # flags |= cv2.CALIB_FIX_FOCAL_LENGTH
     # flags |= cv2.CALIB_FIX_ASPECT_RATIO
-    # flags |= cv2.CALIB_ZERO_TANGENT_DIST
+    flags |= cv2.CALIB_ZERO_TANGENT_DIST
 
     """-------------------------------------------------------------------------"""
     """Stereo calibration"""
@@ -401,7 +401,9 @@ if args.run:
 
     # create disparity matching object in advance
     # stereo_disparity = cv2.StereoBM_create(numDisparities=128, blockSize=15)
-    stereo_disparity = cv2.StereoSGBM_create(-16, 16, 5)
+
+    # the bigger numDisparity is, the bigger the range of the z cootdinate
+    stereo_disparity = cv2.StereoSGBM_create(-16, 96, 17 )#, 32, 64, 32, speckleWindowSize=60, speckleRange=1)
 
     #todo: maybe use cv2.StereoSGBM_create() ?
     # stereo_disparity = cv2.StereoSGBM_create(minDisparity=0, numDisparities=64, blockSize=13, disp12MaxDiff=16,
@@ -485,7 +487,7 @@ if args.run:
         """-------------------------------------------------------------------------"""
         disparity_map = stereo_disparity.compute(img0_rm, img1_rm)
         # cv2.filterSpeckles(disparity_map, 0, 16, 128) #filter out noise
-        cv2.filterSpeckles(disparity_map, 0, 40, 128)
+        cv2.filterSpeckles(disparity_map, 0, 1024, 32)
 
 
         # compute disparity image from undistorted and rectified versions
@@ -493,13 +495,13 @@ if args.run:
         # credit goes to Toby Breckon, Durham University, UK for sharing this caveat
         # disparity_scaled = disparity_map.astype(np.float32) / 16.0
         # set_trace()
-        disparity_scaled = (disparity_map / 16.).astype(np.float32) + abs(disparity_map.min())#/16.0
+        disparity_scaled = (disparity_map / 16.).astype(np.float32) + abs(disparity_map.min())
         # set_trace()
 
 
         if args.display_disparity:
             # show the remapped images and the scaled disparity map (modified for 8 bit display)
-            cv2.imshow('Disparity map', (disparity_map / 16.).astype(np.uint16) + abs(disparity_map.min()))
+            cv2.imshow('Disparity map', (disparity_map / 16.).astype(np.uint8))# + abs(disparity_map.min()))
 
         """-------------------------------------------------------------------------"""
         """Image reprojection into 3D"""
@@ -539,14 +541,13 @@ if args.run:
         """-------------------------------------------------------------------------"""
         """Keyboard handling"""
         """-------------------------------------------------------------------------"""
-        if cv2.waitKey(40) & 0xFF == ord('x'):
+        if cv2.waitKey(40) & 0xFF == 27:
             # set_trace()
             # omit the first point (origin)
-            ax.scatter(marker_b_array[1:,0], marker_b_array[1:,1], marker_b_array[1:,2], label='blue marker')
-            ax.scatter(marker_g_array[1:,0], marker_g_array[1:,1], marker_g_array[1:,2], label='green marker', c='g')
-            ax.legend()
-            plt.show()
-            cv2.waitKey(-1)
+            # ax.scatter(marker_b_array[1:,0], marker_b_array[1:,1], marker_b_array[1:,2], label='blue marker')
+            # ax.scatter(marker_g_array[1:,0], marker_g_array[1:,1], marker_g_array[1:,2], label='green marker', c='g')
+            # ax.legend()
+            # plt.show()
             break
 
 
