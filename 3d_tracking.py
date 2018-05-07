@@ -553,8 +553,21 @@ if args.run:
         """-------------------------------------------------------------------------"""
         """Marker coordinate logging"""
         """-------------------------------------------------------------------------"""
+        center_gx = int(np.round(gx0))
+        center_gy = int(np.round(gy0))
+        # print(img0_rm.shape[1])
+        filter_z = img_reproj[max(center_gx-5,0):min(center_gx+5, img0_rm.shape[0]),max(center_gy-5, 0):min(center_gy+5, img0_rm.shape[1])]
+
+        center_3d = img_reproj[center_gx, center_gy].reshape((1,3))
+        # set_trace()
+        # print(center_3d)
+        center_3d[0, 2] = filter_z[:,:,2].mean()
+        # print(filter_z.shape)
+        # print(filter_z)
+        # print(filter_z[:,:,2].mean())
+        # exit(-1)
         # append points only if both markers were found
-        print(img_reproj[int(np.round(gx0)),int(np.round(gy0))].reshape((1,3)))
+        print(img_reproj[center_gx,center_gy].reshape((1,3)))
         # print(disparity_map.min(), disparity_map.max(), disparity_scaled.min(), disparity_scaled.max(), img_reproj[:,:,2].min(),img_reproj[:,:,2].max())
         # print(filteredImg.min(), filteredImg.max(), img_reproj[:,:,2].min(),img_reproj[:,:,2].max())
         if ret_g: #and ret_b:
@@ -563,7 +576,7 @@ if args.run:
             # set_trace()
             #todo: centerpoint filtering?
             # marker_b_array = np.append(marker_b_array, img_reproj[int(np.round(bx0)),int(np.round(by0))].reshape((1,3)), axis=0)
-            marker_g_array = np.append(marker_g_array, img_reproj[int(np.round(gx0)),int(np.round(gy0))].reshape((1,3)), axis=0)
+            marker_g_array = np.append(marker_g_array, center_3d, axis=0)
 
         else:
             # append last element
