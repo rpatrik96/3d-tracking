@@ -338,6 +338,9 @@ if args.calibrate:
     # flags |= cv2.CALIB_FIX_ASPECT_RATIO
     flags |= cv2.CALIB_ZERO_TANGENT_DIST
 
+    flags = cv2.CALIB_FIX_ASPECT_RATIO + cv2.CALIB_ZERO_TANGENT_DIST +cv2.CALIB_USE_INTRINSIC_GUESS +cv2.CALIB_SAME_FOCAL_LENGTH + \
+            cv2.CALIB_RATIONAL_MODEL +cv2.CALIB_FIX_K3 + cv2.CALIB_FIX_K4 + cv2.CALIB_FIX_K5
+
     """-------------------------------------------------------------------------"""
     """Stereo calibration"""
     """-------------------------------------------------------------------------"""
@@ -424,7 +427,7 @@ if args.run:
     # )
     right_matcher = cv2.ximgproc.createRightMatcher(left_matcher)
     # FILTER Parameters
-    lmbda = 80000
+    lmbda = 100000
     sigma = 1.0
     visual_multiplier = 1.0
 
@@ -467,7 +470,7 @@ if args.run:
         """Color masks"""
         """-------------------------------------------------------------------------"""
         # mask creation for green marker
-        green_mask0 = cv2.inRange(img0_hsv, (40, 30, 0), (80, 255, 255))
+        green_mask0 = cv2.inRange(img0_hsv, (40, 50, 0), (80, 225, 255))
 
         # blue mask
         blue_mask0 = cv2.inRange(img0_hsv, (90, 50, 0), (125, 225, 225))
@@ -503,8 +506,8 @@ if args.run:
             marker_img = np.zeros(roi_g_0.shape)  # create black image for display
 
             # draw circles
-            cv2.circle(marker_img, (int(np.round(bx0)), int(np.round(by0))), 10, 255, 20)
-            cv2.circle(marker_img, (int(np.round(gx0)), int(np.round(gy0))), 30, 128, 40)
+            cv2.circle(marker_img, (int(np.round(by0)), int(np.round(bx0))), 10, 255, 20)
+            cv2.circle(marker_img, (int(np.round(gy0)), int(np.round(gx0))), 30, 128, 40)
 
             cv2.imshow('Markers', marker_img)
             cv2.imshow('roi', roi_g_0)
@@ -537,7 +540,7 @@ if args.run:
         if args.display_disparity:
             # show the remapped images and the scaled disparity map (modified for 8 bit display)
             # cv2.imshow('Disparity map', (disparity_map / 16.).astype(np.uint8))# + abs(disparity_map.min()))
-            filteredImg2 = cv2.normalize(src=filteredImg, dst=filteredImg, beta=0, alpha=255, norm_type=cv2.NORM_MINMAX);
+            filteredImg2 = cv2.normalize(src=filteredImg, dst=filteredImg, beta=0, alpha=255, norm_type=cv2.NORM_MINMAX)
             filteredImg2 = np.uint8(filteredImg2)
             cv2.imshow('Disparity Map', filteredImg2)
 
@@ -556,20 +559,22 @@ if args.run:
         center_gx = int(np.round(gx0))
         center_gy = int(np.round(gy0))
         # print(img0_rm.shape[1])
-        filter_z = img_reproj[max(center_gx-5,0):min(center_gx+5, img0_rm.shape[0]),max(center_gy-5, 0):min(center_gy+5, img0_rm.shape[1])]
+        filter_img = img_reproj[max(center_gx-5,0):min(center_gx+5, img0_rm.shape[0]),max(center_gy-5, 0):min(center_gy+5, img0_rm.shape[1])]
 
         center_3d = img_reproj[center_gx, center_gy].reshape((1,3))
         # set_trace()
         # print(center_3d)
-        center_3d[0, 2] = filter_z[:,:,2].mean()
+        center_3d[0, 0] = filter_img[:,:,0].mean()
+        center_3d[0, 1] = filter_img[:,:,1].mean()
+        center_3d[0, 2] = filter_img[:,:,2].mean()
         # print(filter_z.shape)
         # print(filter_z)
+        print(filteredImg.min(), filteredImg.max(), img_reproj[:,:,2].min(),img_reproj[:,:,2].max())
         # print(filter_z[:,:,2].mean())
         # exit(-1)
         # append points only if both markers were found
         print(img_reproj[center_gx,center_gy].reshape((1,3)))
         # print(disparity_map.min(), disparity_map.max(), disparity_scaled.min(), disparity_scaled.max(), img_reproj[:,:,2].min(),img_reproj[:,:,2].max())
-        # print(filteredImg.min(), filteredImg.max(), img_reproj[:,:,2].min(),img_reproj[:,:,2].max())
         if ret_g: #and ret_b:
         # if True:
             # get marker coordinates
@@ -590,13 +595,14 @@ if args.run:
             set_trace()
 
 
+        # set_trace()
         """-------------------------------------------------------------------------"""
         """Keyboard handling"""
         """-------------------------------------------------------------------------"""
         if cv2.waitKey(40) & 0xFF == 27:
             # set_trace()
             # omit the first point (origin)
-            ax.scatter(marker_b_array[1:,0], marker_b_array[1:,1], marker_b_array[1:,2], label='blue marker')
+            # ax.scatter(marker_b_array[1:,0], marker_b_array[1:,1], marker_b_array[1:,2], label='blue marker')
             ax.scatter(marker_g_array[1:,0], marker_g_array[1:,1], marker_g_array[1:,2], label='green marker', c='g')
             ax.set_xlim(max(-1,marker_g_array[1:,0].min()), min(1,marker_g_array[1:,0].max()))
             ax.set_ylim(max(-1,marker_g_array[1:,1].min()), min(1,marker_g_array[1:,1].max()))
@@ -613,3 +619,4 @@ if args.run:
     capture_object0.release()
     capture_object1.release()
     cv2.destroyAllWindows()
+
