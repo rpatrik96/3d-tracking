@@ -550,6 +550,7 @@ if args.run:
         # use disparity scaled
         img_reproj = cv2.reprojectImageTo3D(filteredImg, Q)
 
+
         if args.display_reprojection:
             cv2.imshow('3d', img_reproj)
 
@@ -603,12 +604,12 @@ if args.run:
             # set_trace()
             # omit the first point (origin)
             # ax.scatter(marker_b_array[1:,0], marker_b_array[1:,1], marker_b_array[1:,2], label='blue marker')
-            ax.scatter(marker_g_array[1:,0], marker_g_array[1:,1], marker_g_array[1:,2], label='green marker', c='g')
-            ax.set_xlim(max(-1,marker_g_array[1:,0].min()), min(1,marker_g_array[1:,0].max()))
-            ax.set_ylim(max(-1,marker_g_array[1:,1].min()), min(1,marker_g_array[1:,1].max()))
-            ax.set_zlim(max(-1,marker_g_array[1:,2].min()), min(1,marker_g_array[1:,2].max()))
-            ax.legend()
-            plt.show()
+            # ax.scatter(marker_g_array[1:,0], marker_g_array[1:,1], marker_g_array[1:,2], label='green marker', c='g')
+            # ax.set_xlim(max(-1,marker_g_array[1:,0].min()), min(1,marker_g_array[1:,0].max()))
+            # ax.set_ylim(max(-1,marker_g_array[1:,1].min()), min(1,marker_g_array[1:,1].max()))
+            # ax.set_zlim(max(-1,marker_g_array[1:,2].min()), min(1,marker_g_array[1:,2].max()))
+            # ax.legend()
+            # plt.show()
             break
 
 
