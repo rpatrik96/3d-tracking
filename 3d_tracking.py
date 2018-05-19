@@ -403,7 +403,7 @@ if args.run:
         Q = f['Q'][()]
 
     # create disparity matching object in advance
-    # stereo_disparity = cv2.StereoBM_create(numDisparities=64, blockSize=13)
+    stereo_disparity = cv2.StereoBM_create(numDisparities=64, blockSize=13)
     left_matcher = cv2.StereoBM_create(numDisparities=128, blockSize=5)
 
     # the bigger numDisparity is, the bigger the range of the z cootdinate
@@ -413,18 +413,18 @@ if args.run:
 
     window_size = 3
     # left_matcher = cv2.StereoSGBM_create(
-        # minDisparity=0,
-        # numDisparities=96,
-        # blockSize=window_size,
-        # P1=8*5*window_size**2,
-        # P2=16 * 5 * window_size ** 2,
-        # disp12MaxDiff=1,
-        # uniquenessRatio=15,
-        # speckleWindowSize=0,
-        # speckleRange=2,
-        # preFilterCap=63,
-       # mode=cv2.STEREO_SGBM_MODE_SGBM_3WAY
-    # )
+    stereo_disparity = cv2.StereoSGBM_create(minDisparity=0,
+        numDisparities=96,
+        blockSize=window_size,
+        P1=8*5*window_size**2,
+        P2=16 * 5 * window_size ** 2,
+        disp12MaxDiff=1,
+        uniquenessRatio=15,
+        speckleWindowSize=0,
+        speckleRange=2,
+        preFilterCap=63,
+       mode=cv2.STEREO_SGBM_MODE_SGBM_3WAY
+    )
     right_matcher = cv2.ximgproc.createRightMatcher(left_matcher)
     # FILTER Parameters
     lmbda = 100000
@@ -506,7 +506,7 @@ if args.run:
             marker_img = np.zeros(roi_g_0.shape)  # create black image for display
 
             # draw circles
-            cv2.circle(marker_img, (int(np.round(by0)), int(np.round(bx0))), 10, 255, 20)
+            # cv2.circle(marker_img, (int(np.round(by0)), int(np.round(bx0))), 10, 255, 20)
             cv2.circle(marker_img, (int(np.round(gy0)), int(np.round(gx0))), 30, 128, 40)
 
             cv2.imshow('Markers', marker_img)
@@ -515,8 +515,8 @@ if args.run:
         """-------------------------------------------------------------------------"""
         """Disparity map calculation"""
         """-------------------------------------------------------------------------"""
-        # disparity_map = stereo_disparity.compute(img0_rm, img1_rm)
-        # cv2.filterSpeckles(disparity_map, 0, 64, 32) #filter out noise
+        disparity_map = stereo_disparity.compute(img0_rm, img1_rm)
+        cv2.filterSpeckles(disparity_map, 0, 64, 32) #filter out noise
         # cv2.filterSpeckles(disparity_map, 0, 512, 32)
 
 
@@ -526,7 +526,7 @@ if args.run:
         # credit goes to Toby Breckon, Durham University, UK for sharing this caveat
         # disparity_scaled = disparity_map
         # set_trace()
-        # disparity_scaled = (disparity_map / 16.).astype(np.float32) + abs(disparity_map.min())
+        disparity_scaled = (disparity_map / 16.).astype(np.float32) + abs(disparity_map.min())
         # set_trace()
 
 
@@ -539,10 +539,10 @@ if args.run:
 
         if args.display_disparity:
             # show the remapped images and the scaled disparity map (modified for 8 bit display)
-            # cv2.imshow('Disparity map', (disparity_map / 16.).astype(np.uint8))# + abs(disparity_map.min()))
+            cv2.imshow('Disparity map', (disparity_map / 16.).astype(np.uint8))# + abs(disparity_map.min()))
             filteredImg2 = cv2.normalize(src=filteredImg, dst=filteredImg, beta=0, alpha=255, norm_type=cv2.NORM_MINMAX)
             filteredImg2 = np.uint8(filteredImg2)
-            cv2.imshow('Disparity Map', filteredImg2)
+            # cv2.imshow('Disparity Map', filteredImg2)
 
         """-------------------------------------------------------------------------"""
         """Image reprojection into 3D"""
